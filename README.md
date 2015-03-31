@@ -37,5 +37,5 @@ parseHTML(`<html><body>&nbsp;</body></html>`, builder);
 ```
 
 # todo
--implement range-based interface
--implement DOM builder
+- implement range-based interface
+- implement DOM builder

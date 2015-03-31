@@ -2,7 +2,7 @@
 Lightweight and forgiving HTML parser inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
 
 HTML Entity parsing and decoding are both optional.
-The current interface is based on callbacks, a ranged based interface is planned as well.
+The current interface is based on callbacks.
 
 Example handler:
 ```d
@@ -35,3 +35,7 @@ Example usage:
 auto builder = DOMBuilder();
 parseHTML(`<html><body>&nbsp;</body></html>`, builder);
 ```
+
+# todo
+-implement range-based interface
+-implement DOM builder

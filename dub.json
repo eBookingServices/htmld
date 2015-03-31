@@ -1,0 +1,12 @@
+{
+	"name": "htmld",
+	"version": "0.1.0",
+	"description": "Lightweight and forgiving HTML parser",
+	"copyright": "Copyright © 2015, Marcio Martins",
+	"authors": [ "Márcio Martins" ],
+	"license": "MIT License",
+	"targetType": "library",
+	"targetName": "htmld",
+	"dependencies": {
+	}
+}

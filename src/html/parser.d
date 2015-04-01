@@ -207,7 +207,13 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
             if (ptr == end)
                 continue;
 
-            if (*ptr == '<') {
+            static if (ParseEntities) {
+                auto noEntity = *ptr != '&';
+            } else {
+                enum noEntity = true;
+            }
+
+            if (noEntity) {
                 if (start != ptr)
                     handler.onText(start[0..ptr-start]);
                 state = PreTagName;
@@ -226,7 +232,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
         case PreTagName:
             if (*ptr == '/') {
                 state = PreClosingTagName;
-            } else if ((textState != ParserTextStates.Normal) || (*ptr == '>') || isSpace(*ptr)) {
+            } else if ((*ptr == '>') || isSpace(*ptr) || (textState != ParserTextStates.Normal)) {
                 state = Text;
             } else {
                 switch (*ptr) {
@@ -347,19 +353,15 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
             if (ptr == end)
                 continue;
 
-            switch(*ptr) {
-            case '>':
+            if (*ptr == '>') {
                 handler.onOpenEnd(start[0..ptr-start]);
                 state = Text;
                 start = ptr + 1;
-                break;
-            case '/':
+            } else if (*ptr == '/') {
                 state = SelfClosingTag;
-                break;
-            default:
+            } else {
                 state = AttrName;
                 start = ptr;
-                break;
             }
             break;
 

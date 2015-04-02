@@ -1,6 +1,6 @@
 {
 	"name": "htmld",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Lightweight and forgiving HTML parser",
 	"copyright": "Copyright © 2015, Marcio Martins",
 	"authors": [ "Márcio Martins" ],

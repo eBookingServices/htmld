@@ -201,7 +201,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
                 break;
             case Script:
             case Style:
-                while ((ptr != end) && (*ptr != '<'))
+                while ((ptr != end) && ((*ptr != '<') || (ptr + 1 == end) || (*(ptr + 1) != '/')))
                     ++ptr;
             }
             if (ptr == end)
@@ -245,7 +245,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
                     start = ptr + 1;
                     break;
                 case '<':
-                    handler.onText(start[0..1+ptr-start]);
+                    handler.onText(start[0..ptr-start]);
                     start = ptr + 1;
                     break;
                 default:

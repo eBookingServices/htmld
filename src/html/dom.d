@@ -548,6 +548,12 @@ private struct Document {
         return ElementWrapper!Element(element);
     }
 
+    ElementWrapper!Element createElement(HTMLString tagName, Element* parent) {
+        auto element = createElement(tagName);
+        parent.appendChild(element);
+        return element;
+    }
+
     void destroyElement(Element* element) {
         alloc_.free(element);
     }

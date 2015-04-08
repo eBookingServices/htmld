@@ -972,4 +972,6 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
             break;
         }
     }
+
+    handler.onDocumentEnd();
 }

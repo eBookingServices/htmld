@@ -1,8 +1,40 @@
 # htmld
-Lightweight and forgiving HTML parser inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
+Lightweight and forgiving HTML parser and DOM.
+
+The parser was inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
 
 HTML Entity parsing and decoding are both optional.
+
 The current interface is based on callbacks.
+
+
+Creating the DOM from source:
+```d
+auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
+writeln(doc.root.outerHTML);
+```
+
+
+Creating/mutating DOM manually
+```d
+auto doc = createDocument();
+doc.root.html = `<body>&nbsp;</body>`;
+
+auto container = doc.createElement("div", doc.root.firstChild);
+container.attr("class", "container");
+container.html = "<p>moo!</p>";
+
+auto app = appender!string;
+doc.root.outerHTML(app);
+```
+
+
+Example parser usage:
+```d
+auto builder = DOMBuilder();
+parseHTML(`<html><body>&nbsp;</body></html>`, builder);
+```
+
 
 Example handler:
 ```d
@@ -27,15 +59,11 @@ struct DOMBuilder {
     
     // required only if DecodeEntities is set
     void onEntity(const(char)[] data, const(char)[] decoded) {}
+    
+    void onDocumentEnd() {}
 }
 ```
 
-Example usage:
-```d
-auto builder = DOMBuilder();
-parseHTML(`<html><body>&nbsp;</body></html>`, builder);
-```
 
 # todo
-- implement range-based interface
-- implement DOM builder
+- implement range-based interface for parser

@@ -3,9 +3,7 @@ Lightweight and forgiving HTML parser and DOM.
 
 The parser was inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
 
-HTML Entity parsing and decoding are both optional.
-
-The current interface is based on callbacks.
+HTML Entity parsing and decoding are both optional. The current parser interface is based on callbacks.
 
 
 Creating the DOM from source:
@@ -15,7 +13,7 @@ writeln(doc.root.outerHTML);
 ```
 
 
-Creating/mutating DOM manually
+Creating/mutating DOM manually:
 ```d
 auto doc = createDocument();
 doc.root.html = `<body>&nbsp;</body>`;
@@ -26,6 +24,17 @@ container.html = "<p>moo!</p>";
 
 auto app = appender!string;
 doc.root.outerHTML(app);
+```
+
+
+QuerySelector interface:
+```d
+if (auto p = doc.querySelector("p:nth-of-type(2)"))
+    p.text = "mooo";
+
+foreach(p; doc.querySelectorAll("p")) {
+    p.text = "mooo";
+}
 ```
 
 

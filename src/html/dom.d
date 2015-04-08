@@ -3,6 +3,9 @@ module html.dom;
 
 import std.array;
 import std.algorithm;
+import std.ascii;
+import std.conv;
+import std.string;
 
 import html.parser;
 import html.alloc;
@@ -10,11 +13,40 @@ import html.alloc;
 
 alias HTMLString = const(char)[];
 
-
 enum DOMCreateOptions {
     DecodeEntities  = 1 << 0,
 
     Default = DecodeEntities,
+}
+
+
+private bool isSpace(Char)(Char ch) {
+    return (ch == 32) || ((ch >= 9) && (ch <= 13));
+}
+
+
+private bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
+    if (a.length == b.length) {
+        for (uint i = 0; i < a.length; ++i) {
+            if (std.ascii.toLower(a[i]) != std.ascii.toLower(b[i]))
+                return false;
+        }
+        return true;
+    }
+    return false;
+}
+
+
+private size_t hashOf(const(char)[] x) {
+    size_t hash = 5381;
+    foreach(i; 0..x.length)
+        hash = (hash * 33) ^ cast(size_t)x.ptr[i];
+    return hash;
+}
+
+
+private ElementWrapper!T wrap(T)(T* element) {
+    return ElementWrapper!T(element);
 }
 
 
@@ -29,8 +61,8 @@ private struct ChildrenForward(ElementType) {
         return (curr_ == null);
     }
 
-    ElementWrapper!ElementType front() {
-        return ElementWrapper!ElementType(curr_);
+    auto front() {
+        return wrap(curr_);
     }
 
     void popFront() {
@@ -52,14 +84,15 @@ private struct DescendantsDFForward(ElementType) {
         while (first && !first.isElement)
             first = first.next_;
         curr_ = first;
+        top_ = first.parent_ ? first.parent_ : null;
     }
 
     bool empty() const {
         return (curr_ == null);
     }
 
-    ElementWrapper!ElementType front() {
-        return ElementWrapper!ElementType(curr_);
+    auto front() {
+        return wrap(curr_);
     }
 
     void popFront() {
@@ -70,7 +103,7 @@ private struct DescendantsDFForward(ElementType) {
                 ElementType* next = curr_.next_;
                 if (!next) {
                     ElementType* parent = curr_.parent_;
-                    while (parent) {
+                    while (parent && (top_ != parent)) {
                         if (parent.next_)
                             break;
                         parent = parent.parent_;
@@ -90,6 +123,41 @@ private struct DescendantsDFForward(ElementType) {
     }
 
     private ElementType* curr_;
+    private ElementType* top_;
+}
+
+
+private struct QuerySelectorAll(ElementType) {
+    this(Selector selector, ElementType* context) {
+        selector_ = selector;
+        elements_ = DescendantsDFForward!ElementType(context);
+        popFront;
+    }
+
+    bool empty() const {
+        return curr_ == null;
+    }
+
+    auto front() {
+        return wrap(curr_);
+    }
+
+    void popFront() {
+        while (!elements_.empty) {
+            auto element = elements_.front;
+            elements_.popFront;
+
+            if (selector_.matches(element)) {
+                curr_ = element;
+                return;
+            }
+        }
+        curr_ = null;
+    }
+
+    private ElementType* curr_;
+    private DescendantsDFForward!ElementType elements_;
+    private Selector selector_;
 }
 
 
@@ -106,7 +174,6 @@ struct ElementWrapper(ElementType) {
     }
 
     void opIndexAssign(T)(T value, HTMLString name) {
-        import std.conv;
         element_.attr(name, value.to!string);
     }
 
@@ -115,12 +182,11 @@ struct ElementWrapper(ElementType) {
     }
 
     @property void id(T)(T value) {
-        import std.conv;
         element_.attr("id", value.to!string);
     }
 
     auto toString() const {
-        return element_.toString();
+        return element_ ? element_.toString() : "null";
     }
 }
 
@@ -401,12 +467,20 @@ struct Element {
         return app.data;
     }
 
+    @property auto parent() const {
+        return wrap(parent_);
+    }
+
+    @property auto parent() {
+        return wrap(parent_);
+    }
+
     @property auto firstChild() const {
         const(Element)* child = firstChild_;
         while (child && !child.isElement)
             child = child.next_;
 
-        return ElementWrapper!(const(Element))(child);
+        return wrap(child);
     }
 
     @property auto firstChild() {
@@ -414,49 +488,49 @@ struct Element {
         while (child && !child.isElement)
             child = child.next_;
 
-        return ElementWrapper!Element(child);
+        return wrap(child);
     }
 
     @property auto lastChild() const {
         const(Element)* child = lastChild_;
         while (child && !child.isElement)
             child = child.prev_;
-        return ElementWrapper!(const(Element))(child);
+        return wrap(child);
     }
 
     @property auto lastChild() {
         auto child = lastChild_;
         while (child && !child.isElement)
             child = child.prev_;
-        return ElementWrapper!Element(child);
+        return wrap(child);
     }
 
     @property auto prevSibbling() const {
         const(Element)* sibbling = prev_;
         while (sibbling && !sibbling.isElement)
             sibbling = sibbling.prev_;
-        return ElementWrapper!(const(Element))(sibbling);
+        return wrap(sibbling);
     }
 
     @property auto prevSibbling() {
         auto sibbling = prev_;
         while (sibbling && !sibbling.isElement)
             sibbling = sibbling.prev_;
-        return ElementWrapper!Element(sibbling);
+        return wrap(sibbling);
     }
 
     @property auto nextSibbling() const {
         const(Element)* sibbling = next_;
         while (sibbling && !sibbling.isElement)
             sibbling = sibbling.next_;
-        return ElementWrapper!(const(Element))(sibbling);
+        return wrap(sibbling);
     }
 
     @property auto nextSibbling() {
         auto sibbling = next_;
         while (sibbling && !sibbling.isElement)
             sibbling = sibbling.next_;
-        return ElementWrapper!Element(sibbling);
+        return wrap(sibbling);
     }
 
     @property auto children() const {
@@ -519,7 +593,7 @@ package:
 }
 
 
-auto createDocument(size_t options = DOMCreateOptions.Default)(const(char)[] source) {
+auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source) {
     enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
 
     auto document = Document();
@@ -542,13 +616,13 @@ static auto createDocument() {
 
 
 private struct Document {
-    ElementWrapper!Element createElement(HTMLString tagName) {
+    auto createElement(HTMLString tagName) {
         auto element = alloc_.alloc();
         *element = Element(&this, tagName);
-        return ElementWrapper!Element(element);
+        return wrap(element);
     }
 
-    ElementWrapper!Element createElement(HTMLString tagName, Element* parent) {
+    auto createElement(HTMLString tagName, Element* parent) {
         auto element = createElement(tagName);
         parent.appendChild(element);
         return element;
@@ -559,11 +633,11 @@ private struct Document {
     }
 
     @property auto root() {
-        return ElementWrapper!Element(root_);
+        return wrap(root_);
     }
 
     @property auto root() const {
-        return ElementWrapper!(const(Element))(root_);
+        return wrap(root_);
     }
 
     @property auto root(Element* root) {
@@ -575,7 +649,32 @@ private struct Document {
     }
 
     @property auto elements() {
-        return DescendantsDFForward!(Element)(root_);
+        return DescendantsDFForward!Element(root_);
+    }
+
+    ElementWrapper!Element querySelector(HTMLString selector, Element* context = null) {
+        auto rules = Selector.parse(selector);
+        return querySelector(rules, context);
+    }
+
+    ElementWrapper!Element querySelector(Selector selector, Element* context = null) {
+        auto top = context ? context : root_;
+
+        foreach(element; DescendantsDFForward!Element(top)) {
+            if (selector.matches(element))
+                return element;
+        }
+        return ElementWrapper!Element(null);
+    }
+
+    QuerySelectorAll!Element querySelectorAll(HTMLString selector, Element* context = null) {
+        auto rules = Selector.parse(selector);
+        return querySelectorAll(rules, context);
+    }
+
+    QuerySelectorAll!Element querySelectorAll(Selector selector, Element* context = null) {
+        auto top = context ? context : root_;
+        return QuerySelectorAll!Element(selector, top);
     }
 
     void toString(Appender)(ref Appender app) const {
@@ -604,7 +703,7 @@ struct DOMBuilder(Document) {
         element_ = parent;
     }
 
-    void onText(const(char)[] data) {
+    void onText(HTMLString data) {
         if (data.ptr == (text_.ptr + text_.length)) {
             text_ = text_.ptr[0..text_.length + data.length];
         } else {
@@ -617,7 +716,7 @@ struct DOMBuilder(Document) {
         element_ = element_.parent_;
     }
 
-    void onOpenStart(const(char)[] data) {
+    void onOpenStart(HTMLString data) {
         auto element = document_.createElement(data);
         if (document_.root) {
             if (!text_.empty) {
@@ -631,10 +730,10 @@ struct DOMBuilder(Document) {
         element_ = element;
     }
 
-    void onOpenEnd(const(char)[] data) {
+    void onOpenEnd(HTMLString data) {
     }
 
-    void onClose(const(char)[] data) {
+    void onClose(HTMLString data) {
         if (!text_.empty) {
             element_.appendText(text_);
             text_.length = 0;
@@ -642,7 +741,7 @@ struct DOMBuilder(Document) {
         element_ = element_.parent_;
     }
 
-    void onAttrName(const(char)[] data) {
+    void onAttrName(HTMLString data) {
         attr_ = data;
         state_ = States.Attr;
     }
@@ -655,7 +754,7 @@ struct DOMBuilder(Document) {
         state_ = States.Global;
     }
 
-    void onAttrValue(const(char)[] data) {
+    void onAttrValue(HTMLString data) {
         if (data.ptr == (value_.ptr + value_.length)) {
             value_ = value_.ptr[0..value_.length + data.length];
         } else {
@@ -663,31 +762,35 @@ struct DOMBuilder(Document) {
         }
     }
 
-    void onComment(const(char)[] data) {
+    void onComment(HTMLString data) {
     }
 
-    void onDeclaration(const(char)[] data) {
+    void onDeclaration(HTMLString data) {
     }
 
-    void onProcessingInstruction(const(char)[] data) {
+    void onProcessingInstruction(HTMLString data) {
     }
 
-    void onCDATA(const(char)[] data) {
+    void onCDATA(HTMLString data) {
     }
 
     void onDocumentEnd() {
+        if (!text_.empty) {
+            element_.appendText(text_);
+            text_.length = 0;
+        }
     }
 
-    void onNamedEntity(const(char)[] data) {
+    void onNamedEntity(HTMLString data) {
     }
 
-    void onNumericEntity(const(char)[] data) {
+    void onNumericEntity(HTMLString data) {
     }
 
-    void onHexEntity(const(char)[] data) {
+    void onHexEntity(HTMLString data) {
     }
 
-    void onEntity(const(char)[] data, const(char)[] decoded) {
+    void onEntity(HTMLString data, HTMLString decoded) {
         if (state_ == States.Global) {
             text_ ~= decoded;
         } else {
@@ -708,4 +811,648 @@ private:
     HTMLString attr_;
     HTMLString value_;
     HTMLString text_;
+}
+
+
+private struct Rule {
+    enum Flags : ushort {
+        HasTag          = 1 << 0,
+        HasAttr         = 1 << 1,
+        HasPseudo       = 1 << 2,
+        CaseSensitive   = 1 << 3,
+        HasAny          = 1 << 4,
+    }
+
+    enum MatchType : ubyte {
+        None = 0,
+        Set,
+        Exact,
+        ContainWord,
+        Contain,
+        Begin,
+        BeginHyphen,
+        End,
+    }
+
+    enum Relation : ubyte {
+        None = 0,
+        Descendant,
+        Child,
+        DirectAdjacent,
+        IndirectAdjacent,
+    }
+
+    bool matches(ElementType)(ElementType element) const {
+        if (flags_ == 0)
+            return false;
+
+        if (flags_ & Flags.HasTag) {
+            if (!tag_.equalsCI(element.tag))
+                return false;
+        }
+
+        if (flags_ & Flags.HasAttr) {
+            auto cs = (flags_ & Flags.CaseSensitive) != 0;
+            final switch (match_) with (MatchType) {
+            case None:
+                break;
+            case Set:
+                if (element.attr(attr_) == null)
+                    return false;
+                break;
+            case Exact:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr || (cs ? (value_ != attr) : !value_.equalsCI(attr)))
+                    return false;
+                break;
+            case Contain:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr || ((attr.indexOf(value_, cs ? CaseSensitive.yes : CaseSensitive.no)) == -1))
+                    return false;
+                break;
+            case ContainWord:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr)
+                    return false;
+
+                size_t start = 0;
+                while (true) {
+                    auto index = attr.indexOf(value_, start, cs ? CaseSensitive.yes : CaseSensitive.no);
+                    if (index == -1)
+                        return false;
+                    if (index && !isSpace(attr[index - 1]))
+                        return false;
+                    if ((index + value_.length == attr.length) || isSpace(attr[index + value_.length]))
+                        break;
+                    start = index + 1;
+                }
+                break;
+            case Begin:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr || ((attr.indexOf(value_, cs ? CaseSensitive.yes : CaseSensitive.no)) != 0))
+                    return false;
+                break;
+            case End:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr || ((attr.lastIndexOf(value_, cs ? CaseSensitive.yes : CaseSensitive.no)) != (attr.length - value_.length)))
+                    return false;
+                break;
+            case BeginHyphen:
+                if (value_.empty) return false;
+                auto attr = element.attr(attr_);
+                if (!attr || ((attr.indexOf(value_, cs ? CaseSensitive.yes : CaseSensitive.no)) != 0) || ((attr.length > value_.length) && (attr[value_.length] != '-')))
+                    return false;
+                break;
+           }
+        }
+
+        if (flags_ & Flags.HasPseudo) {
+            switch (pseudo_) {
+            case hashOf("checked"):
+                if (!element.hasAttr("checked"))
+                    return false;
+                break;
+
+            case hashOf("enabled"):
+                if (element.hasAttr("disabled"))
+                    return false;
+                break;
+
+            case hashOf("disabled"):
+                if (!element.hasAttr("disabled"))
+                    return false;
+                break;
+
+            case hashOf("empty"):
+                if (element.firstChild_)
+                    return false;
+                break;
+
+            case hashOf("optional"):
+                if (element.hasAttr("required"))
+                    return false;
+                break;
+
+            case hashOf("read-only"):
+                if (!element.hasAttr("readonly"))
+                    return false;
+                break;
+
+            case hashOf("read-write"):
+                if (element.hasAttr("readonly"))
+                    return false;
+                break;
+
+            case hashOf("required"):
+                if (!element.hasAttr("required"))
+                    return false;
+                break;
+
+            case hashOf("lang"):
+                if (element.attr("lang") != pseudoArg_)
+                    return false;
+                break;
+
+            case hashOf("first-child"):
+                if (!element.parent_ || (element.parent_.firstChild != element))
+                    return false;
+                break;
+
+            case hashOf("last-child"):
+                if (!element.parent_ || (element.parent_.lastChild != element))
+                    return false;
+                break;
+
+            case hashOf("first-of-type"):
+                auto sibbling = element.prevSibbling;
+                while (sibbling) {
+                    if (sibbling.tag.equalsCI(element.tag))
+                        return false;
+                    sibbling = sibbling.prevSibbling;
+                }
+                break;
+
+            case hashOf("last-of-type"):
+                auto sibbling = element.nextSibbling;
+                while (sibbling) {
+                    if (sibbling.tag.equalsCI(element.tag))
+                        return false;
+                    sibbling = sibbling.nextSibbling;
+                }
+                break;
+
+            case hashOf("nth-child"):
+                auto ith = 1;
+                auto sibbling = element.prevSibbling;
+                while (sibbling) {
+                    if (ith > pseudoArgNum_)
+                        return false;
+                    sibbling = sibbling.prevSibbling;
+                    ++ith;
+                }
+                if (ith != pseudoArgNum_)
+                    return false;
+                break;
+
+            case hashOf("nth-last-child"):
+                auto ith = 1;
+                auto sibbling = element.nextSibbling;
+                while (sibbling) {
+                    if (ith > pseudoArgNum_)
+                        return false;
+                    sibbling = sibbling.nextSibbling;
+                    ++ith;
+                }
+                if (ith != pseudoArgNum_)
+                    return false;
+                break;
+
+            case hashOf("nth-of-type"):
+                auto ith = 1;
+                auto sibbling = element.prevSibbling;
+                while (sibbling) {
+                    if (ith > pseudoArgNum_)
+                        return false;
+                    if (sibbling.tag.equalsCI(element.tag))
+                        ++ith;
+                    sibbling = sibbling.prevSibbling;
+                }
+                if (ith != pseudoArgNum_)
+                    return false;
+                break;
+
+            case hashOf("nth-last-of-type"):
+                auto ith = 1;
+                auto sibbling = element.nextSibbling;
+                while (sibbling) {
+                    if (ith > pseudoArgNum_)
+                        return false;
+                    if (sibbling.tag.equalsCI(element.tag))
+                        ++ith;
+                    sibbling = sibbling.nextSibbling;
+                }
+                if (ith != pseudoArgNum_)
+                    return false;
+                break;
+
+            case hashOf("only-of-type"):
+                auto sibbling = element.prevSibbling;
+                while (sibbling) {
+                    if (sibbling.tag.equalsCI(element.tag))
+                        return false;
+                    sibbling = sibbling.prevSibbling;
+                }
+                sibbling = element.nextSibbling;
+                while (sibbling) {
+                    if (sibbling.tag.equalsCI(element.tag))
+                        return false;
+                    sibbling = sibbling.nextSibbling;
+                }
+                break;
+
+            case hashOf("only-child"):
+                if (!element.parent_ || (element.parent_.firstChild != element.parent_.lastChild))
+                    return false;
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        return true;
+    }
+
+    @property Relation relation() {
+        return relation_;
+    }
+
+package:
+    ushort flags_;
+    MatchType match_;
+    Relation relation_;
+    uint pseudo_;
+    HTMLString tag_;
+    HTMLString attr_;
+    HTMLString value_;
+    HTMLString pseudoArg_;
+    uint pseudoArgNum_;
+}
+
+
+struct Selector {
+    static Selector parse(HTMLString value) {
+        enum ParserStates {
+            Identifier = 0,
+            PostIdentifier,
+            Tag,
+            Class,
+            ID,
+            AttrName,
+            AttrOp,
+            PreAttrValue,
+            AttrValueDQ,
+            AttrValueSQ,
+            AttrValueNQ,
+            PostAttrValue,
+            Pseudo,
+            PseudoArgs,
+            Relation,
+        }
+
+        value = value.strip;
+        auto source = uninitializedArray!(char[])(value.length + 1);
+        source[0..value.length] = value;
+        source[$-1] = ' '; // add a padding space to ease parsing
+
+        auto selector = Selector(source);
+        Rule[] rules;
+        rules.reserve(2);
+        ++rules.length;
+
+        auto rule = &rules.back;
+
+        auto ptr = source.ptr;
+        auto end = source.ptr + source.length;
+        auto start = ptr;
+
+        ParserStates state = ParserStates.Identifier;
+
+        while (ptr != end) {
+            final switch (state) with (ParserStates) {
+            case Identifier:
+                if (*ptr == '#') {
+                    state = ID;
+                    start = ptr + 1;
+                } else if (*ptr == '.') {
+                    state = Class;
+                    start = ptr + 1;
+                } else if (*ptr == '[') {
+                    state = AttrName;
+                    start = ptr + 1;
+                } else if (isAlpha(*ptr)) {
+                    state = Tag;
+                    start = ptr;
+                    continue;
+                } else if (*ptr == '*') {
+                    rule.flags_ |= Rule.Flags.HasAny;
+                    state = PostIdentifier;
+                }
+                break;
+
+            case PostIdentifier:
+                switch (*ptr) {
+                case '#':
+                    state = ID;
+                    start = ptr + 1;
+                    break;
+                case '.':
+                    state = Class;
+                    start = ptr + 1;
+                    break;
+                case '[':
+                    state = AttrName;
+                    start = ptr + 1;
+                    break;
+                case ':':
+                    state = Pseudo;
+                    if ((ptr + 1 != end) && (*(ptr + 1) == ':'))
+                        ++ptr;
+                    start = ptr + 1;
+                    break;
+                default:
+                    state = Relation;
+                    continue;
+                }
+                break;
+
+            case Tag:
+                while ((ptr != end) && isAlpha(*ptr))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+                
+                rule.flags_ |= Rule.Flags.HasTag;
+                rule.tag_ = start[0..ptr-start];
+
+                state = PostIdentifier;
+                continue;
+
+            case Class:
+                while ((ptr != end) && (isAlphaNum(*ptr) || (*ptr == '-') || (*ptr == '_')))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.flags_ |= Rule.Flags.HasAttr;
+                rule.match_ = Rule.MatchType.ContainWord;
+                rule.attr_ = "class";
+                rule.value_ = start[0..ptr-start];
+
+                state = PostIdentifier;
+                break;
+
+            case ID:
+                while ((ptr != end) && (isAlphaNum(*ptr) || (*ptr == '-') || (*ptr == '_')))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.flags_ |= Rule.Flags.HasAttr;
+                rule.match_ = Rule.MatchType.Exact;
+                rule.attr_ = "id";
+                rule.value_ = start[0..ptr-start];
+
+                state = PostIdentifier;
+                break;
+
+            case AttrName:
+                while ((ptr != end) && (isAlphaNum(*ptr) || (*ptr == '-') || (*ptr == '_')))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.flags_ |= Rule.Flags.HasAttr;
+                rule.flags_ |= Rule.Flags.CaseSensitive;
+                rule.attr_ = start[0..ptr-start];
+                state = AttrOp;
+                continue;
+
+            case AttrOp:
+                while ((ptr != end) && (isSpace(*ptr)))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                switch (*ptr) {
+                case ']':
+                    rule.match_ = Rule.MatchType.Set;
+                    state = PostIdentifier;
+                    break;
+                case '=':
+                    rule.match_ = Rule.MatchType.Exact;
+                    state = PreAttrValue;
+                    break;
+                default:
+                    if ((ptr + 1 != end) && (*(ptr + 1) == '=')) {
+                        switch (*ptr) {
+                        case '~':
+                            rule.match_ = Rule.MatchType.ContainWord;
+                            break;
+                        case '^':
+                            rule.match_ = Rule.MatchType.Begin;
+                            break;
+                        case '$':
+                            rule.match_ = Rule.MatchType.End;
+                            break;
+                        case '*':
+                            rule.match_ = Rule.MatchType.Contain;
+                            break;
+                        case '|':
+                            rule.match_ = Rule.MatchType.BeginHyphen;
+                            break;
+                        default:
+                            rule.flags_ = 0; // error
+                            ptr = end - 1;
+                            break;
+                        }
+
+                        state = PreAttrValue;
+                        ++ptr;
+                    }
+                    break;
+                }
+                break;
+
+            case PreAttrValue:
+                while ((ptr != end) && isSpace(*ptr))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+                
+                if (*ptr == '\"') {
+                    state = AttrValueDQ;
+                    start = ptr + 1;
+                } else if (*ptr == '\'') {
+                    state = AttrValueSQ;
+                    start = ptr + 1;
+                } else {
+                    state = AttrValueNQ;
+                    start = ptr;
+                }
+                break;
+
+            case AttrValueDQ:
+                while ((ptr != end) && (*ptr != '\"'))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.value_ = start[0..ptr-start];
+                state = PostAttrValue;
+                break;
+
+            case AttrValueSQ:
+                while ((ptr != end) && (*ptr != '\''))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.value_ = start[0..ptr-start];
+                state = PostAttrValue;
+                break;
+
+            case AttrValueNQ:
+                while ((ptr != end) && !isSpace(*ptr) && (*ptr != ']'))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.value_ = start[0..ptr-start];
+                state = PostAttrValue;
+                continue;
+
+            case PostAttrValue:
+                while ((ptr != end) && (*ptr != ']') && (*ptr != 'i'))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                if (*ptr == ']') {
+                    state = PostIdentifier;
+                } else if (*ptr == 'i') {
+                    rule.flags_ &= ~(Rule.Flags.CaseSensitive);
+                }
+                break;
+
+            case Pseudo:
+                while ((ptr != end) && (isAlpha(*ptr) || (*ptr == '-')))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.pseudo_ = hashOf(start[0..ptr-start]);
+                rule.flags_ |= Rule.Flags.HasPseudo;
+                if (*ptr != '(') {
+                    state = PostIdentifier;
+                    continue;
+                } else {
+                    state = PseudoArgs;
+                    start = ptr + 1;
+                }
+                break;               
+
+            case PseudoArgs:
+                while ((ptr != end) && (*ptr != ')'))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                rule.pseudoArg_ = start[0..ptr-start];
+                if (isNumeric(rule.pseudoArg_))
+                    rule.pseudoArgNum_ = to!uint(rule.pseudoArg_);
+                state = PostIdentifier;
+                break;
+
+            case Relation:
+                while ((ptr != end) && isSpace(*ptr))
+                    ++ptr;
+                if (ptr == end)
+                    continue;
+
+                ++rules.length;
+                rule = &rules.back;
+
+                state = Identifier;
+                switch (*ptr) {
+                case '>':
+                    rule.relation_ = Rule.Relation.Child;
+                    break;
+                case '+':
+                    rule.relation_ = Rule.Relation.DirectAdjacent;
+                    break;
+                case '~':
+                    rule.relation_ = Rule.Relation.IndirectAdjacent;
+                    break;
+                default:
+                    rule.relation_ = Rule.Relation.Descendant;
+                    continue;
+                }
+                break;
+            }
+
+            ++ptr;
+        }
+
+        rules.reverse();
+        selector.rules_ = rules;
+
+        return selector;
+    }
+
+    bool matches(ElementType)(ElementType element) {
+        if (rules_.empty)
+            return false;
+
+        Rule.Relation relation = Rule.Relation.None;
+        foreach(ref rule; rules_) {
+            final switch (relation) with (Rule.Relation) {
+            case None:
+                if (!rule.matches(element))
+                    return false;
+                break;
+            case Descendant:
+                auto parent = element.parent_;
+                if (!parent)
+                    return false;
+
+                while (parent) {
+                    if (rule.matches(parent)) {
+                        element = parent;
+                        break;
+                    }
+                    parent = parent.parent_;
+                }
+                break;
+            case Child:
+                auto parent = element.parent_;
+                if (!parent || !rule.matches(parent))
+                    return false;
+                element = parent;
+                break;
+            case DirectAdjacent:
+                auto adjacent = element.prevSibbling;
+                if (!adjacent || !rule.matches(adjacent))
+                    return false;
+                element = adjacent;
+                break;
+            case IndirectAdjacent:
+                auto adjacent = element.prevSibbling;
+                if (!adjacent)
+                    return false;
+
+                while (adjacent) {
+                    if (rule.matches(adjacent)) {
+                        element = adjacent;
+                        break;
+                    }
+                    adjacent = adjacent.prevSibbling;
+                }
+                break;
+            }
+
+            relation = rule.relation;
+        }
+        
+        return true;
+    }
+
+private:
+    HTMLString source_;
+    Rule[] rules_;
 }

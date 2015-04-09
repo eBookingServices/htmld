@@ -16,63 +16,63 @@ package __gshared immutable static uint[const(char)[]] index_;
 
 
 package auto codeOffset(uint indexValue) {
-    return indexValue >> 4;
+	return indexValue >> 4;
 }
 
 package auto codeLength(uint indexValue) {
-    return indexValue & 15;
+	return indexValue & 15;
 }
 
 auto getNamedEntityUTF8(const(char)[] name) {
 	if (name.length) {
-        if (__ctfe) {
-            immutable index = mixin(EntityIndexDef);
-		    if (auto pindex = name in index) {
-			    auto offset = codeOffset(*pindex);
-			    auto length = codeLength(*pindex);
-			    return cast(const(char)[])bytes_[offset..offset + length];
-		    }
-        } else {
-		    if (auto pindex = name in index_) {
-			    auto offset = codeOffset(*pindex);
-			    auto length = codeLength(*pindex);
-			    return cast(const(char)[])bytes_[offset..offset + length];
-		    }
-        }
+		if (__ctfe) {
+			immutable index = mixin(EntityIndexDef);
+			if (auto pindex = name in index) {
+				auto offset = codeOffset(*pindex);
+				auto length = codeLength(*pindex);
+				return cast(const(char)[])bytes_[offset..offset + length];
+			}
+		} else {
+			if (auto pindex = name in index_) {
+				auto offset = codeOffset(*pindex);
+				auto length = codeLength(*pindex);
+				return cast(const(char)[])bytes_[offset..offset + length];
+			}
+		}
 	}
-    return null;
+	return null;
 }
 
 auto getEntityUTF8(const(char)[] name) {
-    import std.conv;
+	import std.conv;
 
 	if (name.length > 1) {
 		if (name[0] == '#') {
-            int code = 0;
+			int code = 0;
 			if ((name[1] == 'x') || (name[1] == 'X')) {
-                name = name[2..min(2+4, $)];
-                code = parse!int(name, 16);
+				name = name[2..min(2+4, $)];
+				code = parse!int(name, 16);
 			} else {
-                name = name[2..min(1+4, $)];
-                code = parse!int(name);
+				name = name[2..min(1+4, $)];
+				code = parse!int(name);
 			}
 
-            return decodeCodePoint(code);
+			return decodeCodePoint(code);
 		}
 	}
 	return getNamedEntityUTF8(name);
 }
 
 package auto decodeCodePoint(int code) {
-    static char[4] buf;
+	static char[4] buf;
 
-    if (isValidDchar(cast(dchar)code)) {
-        return toUTF8(buf, cast(dchar)code);
-    } else {
-        return toUTF8(buf, cast(dchar)0xfffd);
-    }
+	if (isValidDchar(cast(dchar)code)) {
+		return toUTF8(buf, cast(dchar)code);
+	} else {
+		return toUTF8(buf, cast(dchar)0xfffd);
+	}
 }
 
 shared static this() {
-    index_ = mixin(EntityIndexDef);
+	index_ = mixin(EntityIndexDef);
 }

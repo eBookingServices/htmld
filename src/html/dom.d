@@ -40,7 +40,7 @@ private bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
 private size_t hashOf(const(char)[] x) {
 	size_t hash = 5381;
 	foreach(i; 0..x.length)
-		hash = (hash * 33) ^ cast(size_t)x.ptr[i];
+		hash = (hash * 33) ^ cast(size_t)(std.ascii.toLower(x.ptr[i]));
 	return hash;
 }
 
@@ -861,6 +861,25 @@ struct DOMBuilder(Document) {
 	}
 
 	void onOpenEnd(HTMLString data) {
+		auto hash = hashOf(element_.tag);
+		switch (hash) {
+		case hashOf("area"):
+		case hashOf("base"):
+		case hashOf("basefont"):
+		case hashOf("br"):
+		case hashOf("col"):
+		case hashOf("hr"):
+		case hashOf("img"):
+		case hashOf("input"):
+		case hashOf("isindex"):
+		case hashOf("link"):
+		case hashOf("meta"):
+		case hashOf("param"):
+			onSelfClosing();
+			break;
+		default:
+			break;
+		}
 	}
 
 	void onClose(HTMLString data) {

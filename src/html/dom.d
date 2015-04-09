@@ -92,7 +92,7 @@ private struct DescendantsDFForward(NodeType, alias Condition = null) {
 		top_ = (first && first.parent_) ? first.parent_ : null;
 		static if (!is(typeof(Condition) == typeof(null))) {
 			if (!Condition(first))
-				popFront;				
+				popFront;
 		}
 	}
 
@@ -117,7 +117,7 @@ private struct DescendantsDFForward(NodeType, alias Condition = null) {
 							break;
 						parent = parent.parent_;
 					}
-					if (parent) 
+					if (parent)
 						next = parent.next_;
 				}
 
@@ -688,7 +688,7 @@ static auto createDocument() {
 }
 
 
-private struct Document {
+struct Document {
 	auto createElement(HTMLString tagName) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, tagName);
@@ -742,6 +742,7 @@ private struct Document {
 	}
 
 	void destroyNode(Node* node) {
+
 		alloc_.free(node);
 	}
 
@@ -1314,11 +1315,11 @@ struct Selector {
 				break;
 
 			case Tag:
-				while ((ptr != end) && isAlpha(*ptr))
+				while ((ptr != end) && isAlphaNum(*ptr))
 					++ptr;
 				if (ptr == end)
 					continue;
-				
+
 				rule.flags_ |= Rule.Flags.HasTag;
 				rule.tag_ = start[0..ptr-start];
 
@@ -1416,7 +1417,7 @@ struct Selector {
 					++ptr;
 				if (ptr == end)
 					continue;
-				
+
 				if (*ptr == '\"') {
 					state = AttrValueDQ;
 					start = ptr + 1;
@@ -1487,7 +1488,7 @@ struct Selector {
 					state = PseudoArgs;
 					start = ptr + 1;
 				}
-				break;               
+				break;
 
 			case PseudoArgs:
 				while ((ptr != end) && (*ptr != ')'))
@@ -1550,9 +1551,6 @@ struct Selector {
 				break;
 			case Descendant:
 				auto parent = element.parent_;
-				if (!parent)
-					return false;
-
 				while (parent) {
 					if (rule.matches(parent)) {
 						element = parent;
@@ -1560,6 +1558,9 @@ struct Selector {
 					}
 					parent = parent.parent_;
 				}
+				if (!parent)
+					return false;
+
 				break;
 			case Child:
 				auto parent = element.parent_;
@@ -1575,9 +1576,6 @@ struct Selector {
 				break;
 			case IndirectAdjacent:
 				auto adjacent = element.previousSibling;
-				if (!adjacent)
-					return false;
-
 				while (adjacent) {
 					if (rule.matches(adjacent)) {
 						element = adjacent;
@@ -1585,12 +1583,15 @@ struct Selector {
 					}
 					adjacent = adjacent.previousSibling;
 				}
+				if (!adjacent)
+					return false;
+
 				break;
 			}
 
 			relation = rule.relation;
 		}
-		
+
 		return true;
 	}
 

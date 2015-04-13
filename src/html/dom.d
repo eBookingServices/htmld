@@ -209,6 +209,8 @@ enum NodeTypes : ubyte {
 	Element,
 	Comment,
 	CDATA,
+	Declaration,
+	ProcessingInstruction,
 }
 
 
@@ -229,10 +231,10 @@ struct Node {
 	void text(Appender)(ref Appender app) const {
 		const(Node)* child = firstChild_;
 		while (child) {
-			if (child.isTextNode) {
-				app.put(child.tag_);
-			} else {
+			if (child.isElementNode) {
 				child.text(app);
+			} else {
+				app.put(child.tag_);
 			}
 			child = child.next_;
 		}
@@ -245,8 +247,12 @@ struct Node {
 	}
 
 	@property void text(HTMLString text) {
-		destroyChildren();
-		appendText(text);
+		if (isElementNode) {
+			destroyChildren();
+			appendText(text);
+		} else {
+			tag_ = text;
+		}
 	}
 
 	@property void attr(HTMLString name, HTMLString value) {
@@ -511,6 +517,16 @@ struct Node {
 			app.put(tag_);
 			app.put("]]>");
 			break;
+		case Declaration:
+			app.put("<!");
+			app.put(tag_);
+			app.put(">");
+			break;
+		case ProcessingInstruction:
+			app.put("<?");
+			app.put(tag_);
+			app.put(">");
+			break;
 		}
 	}
 
@@ -548,6 +564,16 @@ struct Node {
 			app.put("<[CDATA[");
 			app.put(tag_);
 			app.put("]]>");
+			break;
+		case Declaration:
+			app.put("<!");
+			app.put(tag_);
+			app.put(">");
+			break;
+		case ProcessingInstruction:
+			app.put("<?");
+			app.put(tag_);
+			app.put(">");
 			break;
 		}
 	}
@@ -642,6 +668,14 @@ struct Node {
 		return type == NodeTypes.CDATA;
 	}
 
+	@property isDeclarationNode() const {
+		return type == NodeTypes.Declaration;
+	}
+
+	@property isProcessingInstructionNode() const {
+		return type == NodeTypes.ProcessingInstruction;
+	}
+
 package:
 	enum TypeMask	= 0x7;
 	enum TypeShift	= 0;
@@ -669,13 +703,10 @@ package:
 auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source) {
 	enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
 
-	auto document = Document();
-	document.init();
-
+	auto document = createDocument();
 	auto builder = DOMBuilder!(Document)(document);
+
 	parseHTML!(typeof(builder), parserOptions)(source, builder);
-	if (!document.root)
-		document.root(document.createElement("html"));
 	return document;
 }
 
@@ -683,66 +714,67 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 static auto createDocument() {
 	auto document = Document();
 	document.init();
-	document.root(document.createElement("html"));
+	document.root(document.createElement("root"));
 	return document;
 }
 
 
 struct Document {
-	auto createElement(HTMLString tagName) {
+	auto createElement(HTMLString tagName, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, tagName);
 		node.flags_ |= (NodeTypes.Element << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
 		return wrap(node);
 	}
 
-	auto createElement(HTMLString tagName, Node* parent) {
-		auto node = createElement(tagName);
-		parent.appendChild(node);
-		return node;
-	}
-
-	auto createTextNode(HTMLString text) {
+	auto createTextNode(HTMLString text, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, text);
 		node.flags_ |= (NodeTypes.Text << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
 		return wrap(node);
 	}
 
-	auto createTextNode(HTMLString text, Node* parent) {
-		auto node = createTextNode(text);
-		parent.appendChild(node);
-		return node;
-	}
-
-	auto createCommentNode(HTMLString comment) {
+	auto createCommentNode(HTMLString comment, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, comment);
 		node.flags_ |= (NodeTypes.Comment << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
 		return wrap(node);
 	}
 
-	auto createCommentNode(HTMLString text, Node* parent) {
-		auto node = createCommentNode(text);
-		parent.appendChild(node);
-		return node;
-	}
-
-	auto createCDATANode(HTMLString cdata) {
+	auto createCDATANode(HTMLString cdata, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, cdata);
 		node.flags_ |= (NodeTypes.CDATA << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
 		return wrap(node);
 	}
 
-	auto createCDATANode(HTMLString text, Node* parent) {
-		auto node = createCDATANode(text);
-		parent.appendChild(node);
-		return node;
+	auto createDeclarationNode(HTMLString data, Node* parent = null) {
+		auto node = alloc_.alloc();
+		*node = Node(&this, data);
+		node.flags_ |= (NodeTypes.Declaration << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
+		return wrap(node);
+	}
+
+	auto createProcessingInstructionNode(HTMLString data, Node* parent = null) {
+		auto node = alloc_.alloc();
+		*node = Node(&this, data);
+		node.flags_ |= (NodeTypes.ProcessingInstruction << Node.TypeShift);
+		if (parent)
+			parent.appendChild(node);
+		return wrap(node);
 	}
 
 	void destroyNode(Node* node) {
-
 		alloc_.free(node);
 	}
 
@@ -830,7 +862,7 @@ private:
 struct DOMBuilder(Document) {
 	this(ref Document document, Node* parent = null) {
 		document_ = &document;
-		element_ = parent;
+		element_ = parent ? parent : document.root;
 	}
 
 	void onText(HTMLString data) {
@@ -847,16 +879,12 @@ struct DOMBuilder(Document) {
 	}
 
 	void onOpenStart(HTMLString data) {
-		auto element = document_.createElement(data);
-		if (document_.root) {
-			if (!text_.empty) {
-				element_.appendText(text_);
-				text_.length = 0;
-			}
-			element_.appendChild(element);
-		} else {
-			document_.root(element);
+		if (!text_.empty) {
+			element_.appendText(text_);
+			text_.length = 0;
 		}
+
+		auto element = document_.createElement(data, element_);
 		element_ = element;
 	}
 
@@ -912,19 +940,19 @@ struct DOMBuilder(Document) {
 	}
 
 	void onComment(HTMLString data) {
-		auto comment = document_.createCommentNode(data);
-		element_.appendChild(comment);
+		document_.createCommentNode(data, element_);
 	}
 
 	void onDeclaration(HTMLString data) {
+		document_.createDeclarationNode(data, element_);
 	}
 
 	void onProcessingInstruction(HTMLString data) {
+		document_.createProcessingInstructionNode(data, element_);
 	}
 
 	void onCDATA(HTMLString data) {
-		auto cdata = document_.createCDATANode(data);
-		element_.appendChild(cdata);
+		document_.createCDATANode(data, element_);
 	}
 
 	void onDocumentEnd() {
@@ -1274,7 +1302,6 @@ struct Selector {
 
 		auto selector = Selector(source);
 		Rule[] rules;
-		rules.reserve(2);
 		++rules.length;
 
 		auto rule = &rules.back;

@@ -1266,7 +1266,7 @@ package:
 	ushort flags_;
 	MatchType match_;
 	Relation relation_;
-	uint pseudo_;
+	size_t pseudo_;
 	HTMLString tag_;
 	HTMLString attr_;
 	HTMLString value_;

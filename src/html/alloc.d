@@ -14,7 +14,7 @@ private struct Chunk(size_t ElementSize, size_t ChunkSize = 1024, size_t Alignme
 	void init() {
 		ptr_ = cast(ubyte*)GC.malloc(ChunkSize * elementSize, Alignment);
 		foreach (i; 0..ChunkSize)
-			*(cast(uint*)&ptr_[i * elementSize]) = i + 1;
+			*(cast(size_t*)&ptr_[i * elementSize]) = cast(size_t)(i + 1);
 	}
 
 	void destroy() {
@@ -35,7 +35,7 @@ private struct Chunk(size_t ElementSize, size_t ChunkSize = 1024, size_t Alignme
 
 	void free(void* ptr) {
 		assert(owns(ptr));
-		*(cast(uint*)ptr) = free_;
+		*(cast(size_t*)ptr) = free_;
 		free_ = (ptr - ptr_) / elementSize;
 	}
 

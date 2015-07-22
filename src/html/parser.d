@@ -267,6 +267,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreStyle_ST;
 			} else {
 				state = TagName;
+				goto case TagName;
 			}
 			break;
 
@@ -308,6 +309,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingStyle_ST;
 			} else {
 				state = Text;
+				goto case Text;
 			}
 			break;
 
@@ -754,7 +756,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreScript_SCR;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -763,7 +765,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreScript_SCRI;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -772,7 +774,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreScript_SCRIP;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -781,7 +783,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreScript_SCRIPT;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -790,14 +792,14 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				textState = ParserTextStates.Script;
 
 			state = TagName;
-			continue;
+			goto case TagName;
 
 		case PreStyle_ST:
 			if ((*ptr == 'y') || (*ptr == 'Y')) {
 				state = PreStyle_STY;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -806,7 +808,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreStyle_STYL;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -815,7 +817,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = PreStyle_STYLE;
 			} else {
 				state = TagName;
-				continue;
+				goto case TagName;
 			}
 			break;
 
@@ -824,14 +826,14 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				textState = ParserTextStates.Style;
 
 			state = TagName;
-			continue;
+			goto case TagName;
 
 		case ClosingScript_SC:
 			if ((*ptr == 'r') || (*ptr == 'R')) {
 				state = ClosingScript_SCR;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -840,7 +842,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingScript_SCRI;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -849,7 +851,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingScript_SCRIP;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -858,7 +860,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingScript_SCRIPT;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -870,6 +872,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				continue;
 			} else {
 				state = Text;
+				goto case Text;
 			}
 			break;
 
@@ -877,8 +880,8 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			if ((*ptr == 'y') || (*ptr == 'Y')) {
 				state = ClosingStyle_STY;
 			} else {
-				state = TagName;
-				continue;
+				state = Text;
+				goto case Text;
 			}
 			break;
 
@@ -887,7 +890,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingStyle_STYL;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -896,7 +899,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = ClosingStyle_STYLE;
 			} else {
 				state = Text;
-				continue;
+				goto case Text;
 			}
 			break;
 
@@ -908,6 +911,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				continue;
 			} else {
 				state = Text;
+				goto case Text;
 			}
 			break;
 		}

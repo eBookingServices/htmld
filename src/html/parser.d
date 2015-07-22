@@ -874,7 +874,6 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = Text;
 				goto case Text;
 			}
-			break;
 
 		case ClosingStyle_ST:
 			if ((*ptr == 'y') || (*ptr == 'Y')) {
@@ -913,7 +912,6 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 				state = Text;
 				goto case Text;
 			}
-			break;
 		}
 
 		++ptr;

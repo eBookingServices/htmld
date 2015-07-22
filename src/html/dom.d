@@ -14,6 +14,7 @@ import html.alloc;
 alias HTMLString = const(char)[];
 
 enum DOMCreateOptions {
+	None = 0,
 	DecodeEntities  = 1 << 0,
 
 	Default = DecodeEntities,

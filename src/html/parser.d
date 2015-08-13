@@ -8,11 +8,7 @@ import std.conv;
 import std.traits;
 
 import html.entities;
-
-
-private bool isSpace(Char)(Char ch) {
-	return (ch == 32) || ((ch >= 9) && (ch <= 13));
-}
+import html.utils;
 
 
 private enum ParserStates {

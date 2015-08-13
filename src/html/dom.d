@@ -1,14 +1,15 @@
 module html.dom;
 
 
-import std.array;
 import std.algorithm;
+import std.array;
 import std.ascii;
 import std.conv;
 import std.string;
 
 import html.parser;
 import html.alloc;
+import html.utils;
 
 
 alias HTMLString = const(char)[];
@@ -21,37 +22,12 @@ enum DOMCreateOptions {
 }
 
 
-private bool isSpace(Char)(Char ch) {
-	return (ch == 32) || ((ch >= 9) && (ch <= 13));
-}
-
-
-private bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
-	if (a.length == b.length) {
-		for (uint i = 0; i < a.length; ++i) {
-			if (std.ascii.toLower(a[i]) != std.ascii.toLower(b[i]))
-				return false;
-		}
-		return true;
-	}
-	return false;
-}
-
-
-private size_t hashOf(const(char)[] x) {
-	size_t hash = 5381;
-	foreach(i; 0..x.length)
-		hash = (hash * 33) ^ cast(size_t)(std.ascii.toLower(x.ptr[i]));
-	return hash;
-}
-
-
-private NodeWrapper!T wrap(T)(T* node) {
-	return NodeWrapper!T(node);
-}
-
 enum OnlyElements = "(a) => { return a.isElementNode; }";
 
+
+package NodeWrapper!T wrap(T)(T* node) {
+	return NodeWrapper!T(node);
+}
 
 private struct ChildrenForward(NodeType, alias Condition = null) {
 	this(NodeType* first) {
@@ -230,29 +206,37 @@ struct Node {
 	}
 
 	void text(Appender)(ref Appender app) const {
-		const(Node)* child = firstChild_;
-		while (child) {
-			if (child.isElementNode) {
-				child.text(app);
-			} else {
-				app.put(child.tag_);
+		if (isTextNode) {
+			app.put(tag_);
+		} else {
+			const(Node)* child = firstChild_;
+			while (child) {
+				if (child.isElementNode) {
+					child.text(app);
+				} else {
+					app.put(child.tag_);
+				}
+				child = child.next_;
 			}
-			child = child.next_;
 		}
 	}
 
 	@property auto text() {
-		Appender!HTMLString app;
-		text(app);
-		return app.data;
+		if (isTextNode) {
+			return tag_;
+		} else {
+			Appender!HTMLString app;
+			text(app);
+			return app.data;
+		}
 	}
 
 	@property void text(HTMLString text) {
-		if (isElementNode) {
+		if (isTextNode) {
+			tag_ = text;
+		} else {
 			destroyChildren();
 			appendText(text);
-		} else {
-			tag_ = text;
 		}
 	}
 
@@ -262,7 +246,7 @@ struct Node {
 		attrs_[name] = value;
 	}
 
-	@property auto attr(HTMLString name) const {
+	@property HTMLString attr(HTMLString name) const {
 		if (auto pattr = name in attrs_)
 			return *pattr;
 		return null;
@@ -890,20 +874,20 @@ struct DOMBuilder(Document) {
 	}
 
 	void onOpenEnd(HTMLString data) {
-		auto hash = hashOf(element_.tag);
+		auto hash = tagHashOf(element_.tag);
 		switch (hash) {
-		case hashOf("area"):
-		case hashOf("base"):
-		case hashOf("basefont"):
-		case hashOf("br"):
-		case hashOf("col"):
-		case hashOf("hr"):
-		case hashOf("img"):
-		case hashOf("input"):
-		case hashOf("isindex"):
-		case hashOf("link"):
-		case hashOf("meta"):
-		case hashOf("param"):
+		case tagHashOf("area"):
+		case tagHashOf("base"):
+		case tagHashOf("basefont"):
+		case tagHashOf("br"):
+		case tagHashOf("col"):
+		case tagHashOf("hr"):
+		case tagHashOf("img"):
+		case tagHashOf("input"):
+		case tagHashOf("isindex"):
+		case tagHashOf("link"):
+		case tagHashOf("meta"):
+		case tagHashOf("param"):
 			onSelfClosing();
 			break;
 		default:

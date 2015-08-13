@@ -897,10 +897,25 @@ struct DOMBuilder(Document) {
 
 	void onClose(HTMLString data) {
 		if (!text_.empty) {
-			element_.appendText(text_);
-			text_.length = 0;
+			if (element_) {
+				element_.appendText(text_);
+				text_.length = 0;
+			} else {
+				document_.root.appendText(text_);
+			}
 		}
-		element_ = element_.parent_;
+
+		if (element_) {
+			auto element = element_;
+
+			while (element) {
+				if (element.tag.equalsCI(data)) {
+					element_ = element_.parent_;
+					break;
+				}
+				element = element.parent_;
+			}
+		}
 	}
 
 	void onAttrName(HTMLString data) {
@@ -942,8 +957,12 @@ struct DOMBuilder(Document) {
 
 	void onDocumentEnd() {
 		if (!text_.empty) {
-			element_.appendText(text_);
-			text_.length = 0;
+			if (element_) {
+				element_.appendText(text_);
+				text_.length = 0;
+			} else {
+				document_.root.appendText(text_);
+			}
 		}
 	}
 

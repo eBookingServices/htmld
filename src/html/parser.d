@@ -141,7 +141,7 @@ private auto parseNumericEntity(Handler, size_t options)(ref const(char)* start,
 
 	static if ((options & ParserOptions.DecodeEntities) != 0) {
 		auto cname = name;
-		auto code = (name.length > 4) ? 0 : parse!int(cname, 16);
+		auto code = (name.length > 4) ? 0 : parse!int(cname, 10);
 		handler.onEntity(start[2..2+length], decodeCodePoint(code));
 	}
 

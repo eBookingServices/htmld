@@ -2,6 +2,8 @@ module html.utils;
 
 
 import std.ascii;
+import std.format;
+import std.utf;
 
 
 package bool isSpace(Char)(Char ch) {
@@ -26,4 +28,41 @@ package size_t tagHashOf(const(char)[] x) {
 	foreach(i; 0..x.length)
 		hash = (hash * 33) ^ cast(size_t)(std.ascii.toLower(x.ptr[i]));
 	return hash;
+}
+
+
+void writeHTMLEscaped(Appender)(ref Appender app, const(char)[] x) {
+	foreach (ch; x.byDchar) {
+		switch (ch) {
+			case '"':
+				app.put("&quot;");
+				break;
+			case '\'':
+				app.put("&#39;");
+				break;
+			case 'a': .. case 'z':
+				goto case;
+			case 'A': .. case 'Z':
+				goto case;
+			case '0': .. case '9':
+				goto case;
+			case ' ', '\t', '\n', '\r', '-', '_', '.', ':', ',', ';',
+				'#', '+', '*', '?', '=', '(', ')', '/', '!',
+				'%' , '{', '}', '[', ']', '$', '^', '~':
+				app.put(cast(char)ch);
+				break;
+			case '<':
+				app.put("&lt;");
+				break;
+			case '>':
+				app.put("&gt;");
+				break;
+			case '&':
+				app.put("&amp;");
+				break;
+			default:
+				formattedWrite(&app, "&#%d;", cast(uint)ch);
+				break;
+		}
+	}
 }

@@ -211,24 +211,16 @@ struct Node {
 		} else {
 			const(Node)* child = firstChild_;
 			while (child) {
-				if (child.isElementNode) {
-					child.text(app);
-				} else {
-					app.put(child.tag_);
-				}
+				child.text(app);
 				child = child.next_;
 			}
 		}
 	}
 
 	@property auto text() {
-		if (isTextNode) {
-			return tag_;
-		} else {
-			Appender!HTMLString app;
-			text(app);
-			return app.data;
-		}
+		Appender!HTMLString app;
+		text(app);
+		return app.data;
 	}
 
 	@property void text(HTMLString text) {
@@ -474,7 +466,7 @@ struct Node {
 
 				if (value.length) {
 					app.put("=\"");
-					app.put(value);
+					writeHTMLEscaped(app, value);
 					app.put("\"");
 				}
 			}
@@ -490,7 +482,7 @@ struct Node {
 			}
 			break;
 		case Text:
-			app.put(tag_);
+			writeHTMLEscaped(app, tag_);
 			break;
 		case Comment:
 			app.put("<!--");
@@ -527,7 +519,7 @@ struct Node {
 
 				if (value.length) {
 					app.put("=\"");
-					app.put(value);
+					writeHTMLEscaped(app, value);
 					app.put("\"");
 				}
 			}
@@ -538,7 +530,7 @@ struct Node {
 			}
 			break;
 		case Text:
-			app.put(tag_);
+			writeHTMLEscaped(app, tag_);
 			break;
 		case Comment:
 			app.put("<!--");

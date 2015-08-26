@@ -140,8 +140,8 @@ private auto parseNumericEntity(Handler, size_t options)(ref const(char)* start,
 	handler.onNumericEntity(name);
 
 	static if ((options & ParserOptions.DecodeEntities) != 0) {
-		auto cname = name;
-		auto code = (name.length > 4) ? 0 : parse!int(cname, 10);
+		auto cname = name[0..min(8, name.length)];
+		auto code = parse!uint(cname, 10);
 		handler.onEntity(start[2..2+length], decodeCodePoint(code));
 	}
 
@@ -161,8 +161,8 @@ private auto parseHexEntity(Handler, size_t options)(ref const(char)* start, ref
 	handler.onHexEntity(name);
 
 	static if ((options & ParserOptions.DecodeEntities) != 0) {
-		auto cname = name;
-		auto code = (name.length > 4) ? 0 : parse!int(cname, 16);
+		auto cname = name[0..min(6, name.length)];
+		auto code = parse!uint(cname, 16);
 		handler.onEntity(name, decodeCodePoint(code));
 	}
 

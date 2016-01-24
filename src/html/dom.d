@@ -473,7 +473,15 @@ struct Node {
 
 			if (!isSelfClosing) {
 				app.put('>');
-				innerHTML(app);
+				switch (tagHashOf(tag_))
+				{
+				case tagHashOf("script"), tagHashOf("style"):
+					text(app);
+					break;
+				default:
+					innerHTML(app);
+					break;
+				}
 				app.put("</");
 				app.put(tag_);
 				app.put('>');
@@ -687,6 +695,17 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 	return document;
 }
 
+unittest
+{
+	auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
+	assert(doc.root.outerHTML == `<root><html><body>&#160;</body></html></root>`);
+	doc = createDocument!(DOMCreateOptions.None)(`<html><body>&nbsp;</body></html>`);
+	assert(doc.root.outerHTML == `<root><html><body>&amp;nbsp;</body></html></root>`);
+	doc = createDocument(`<script>&nbsp;</script>`);
+	assert(doc.root.outerHTML == `<root><script>&nbsp;</script></root>`, doc.root.outerHTML);
+	doc = createDocument(`<style>&nbsp;</style>`);
+	assert(doc.root.outerHTML == `<root><style>&nbsp;</style></root>`, doc.root.outerHTML);
+}
 
 static auto createDocument() {
 	auto document = Document();

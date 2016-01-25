@@ -1,4 +1,4 @@
-# htmld
+# htmld [![Build Status](https://travis-ci.org/eBookingServices/htmld.svg?branch=master)](https://travis-ci.org/eBookingServices/htmld)
 Lightweight and forgiving HTML parser and DOM.
 
 The parser was inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)

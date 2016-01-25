@@ -880,6 +880,7 @@ struct DOMBuilder(Document) {
 		case tagHashOf("link"):
 		case tagHashOf("meta"):
 		case tagHashOf("param"):
+		case tagHashOf("wbr"):
 			onSelfClosing();
 			break;
 		default:

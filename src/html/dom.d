@@ -471,7 +471,12 @@ struct Node {
 				}
 			}
 
-			if (!isSelfClosing) {
+			// prefer isSelfClosing over isVoidElement to preserve xhtmlish <br />
+			if (isSelfClosing) {
+				app.put(" />");
+			} else if (isVoidElement) {
+				app.put(">");
+			}  else {
 				app.put('>');
 				switch (tagHashOf(tag_))
 				{
@@ -485,8 +490,6 @@ struct Node {
 				app.put("</");
 				app.put(tag_);
 				app.put('>');
-			} else {
-				app.put(" />");
 			}
 			break;
 		case Text:
@@ -531,10 +534,10 @@ struct Node {
 					app.put("\"");
 				}
 			}
-			if (!isSelfClosing) {
-				app.put("/>");
-			} else {
+			if (isSelfClosing || isVoidElement) {
 				app.put(">");
+			} else {
+				app.put("/>");
 			}
 			break;
 		case Text:
@@ -637,6 +640,29 @@ struct Node {
 		return (flags_ & Flags.SelfClosing) != 0;
 	}
 
+	@property isVoidElement() const {
+		if (!isElementNode)
+			return false;
+		switch (tagHashOf(tag_)) {
+		case tagHashOf("area"):
+		case tagHashOf("base"):
+		case tagHashOf("basefont"):
+		case tagHashOf("br"):
+		case tagHashOf("col"):
+		case tagHashOf("hr"):
+		case tagHashOf("img"):
+		case tagHashOf("input"):
+		case tagHashOf("isindex"):
+		case tagHashOf("link"):
+		case tagHashOf("meta"):
+		case tagHashOf("param"):
+		case tagHashOf("wbr"):
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	@property isElementNode() const {
 		return type == NodeTypes.Element;
 	}
@@ -705,6 +731,38 @@ unittest
 	assert(doc.root.outerHTML == `<root><script>&nbsp;</script></root>`, doc.root.outerHTML);
 	doc = createDocument(`<style>&nbsp;</style>`);
 	assert(doc.root.outerHTML == `<root><style>&nbsp;</style></root>`, doc.root.outerHTML);
+}
+
+unittest
+{
+	// void elements should not be self-closed
+	auto doc = createDocument(`<area><base><br><col>`);
+	assert(doc.root.outerHTML == `<root><area><base><br><col></root>`, doc.root.outerHTML);
+	// svg and mathml elements can be self-closed though
+	doc = createDocument(`<svg /><math /><svg></svg>`);
+	assert(doc.root.outerHTML == `<root><svg /><math /><svg></svg></root>`, doc.root.outerHTML);
+	// still preserve self-closed void tags for the sake of everyone's own preference
+	doc = createDocument(`<br />`);
+	assert(doc.root.outerHTML == `<root><br /></root>`, doc.root.outerHTML);
+}
+
+// toString prints elements with content as <tag attr="value"/>
+unittest
+{
+	// self-closed element w/o content
+	auto doc = createDocument(`<svg />`);
+	assert(doc.root.firstChild.toString == `<svg>`, doc.root.firstChild.toString);
+	// elements w/ content
+	doc = createDocument(`<svg></svg>`);
+	assert(doc.root.firstChild.toString == `<svg/>`, doc.root.firstChild.toString);
+	doc = createDocument(`<div class="mydiv"></div>`);
+	assert(doc.root.firstChild.toString == `<div class="mydiv"/>`, doc.root.firstChild.toString);
+	// void element
+	doc = createDocument(`<br>`);
+	assert(doc.root.firstChild.toString == `<br>`, doc.root.firstChild.toString);
+	// "invalid" self-closed void element
+	doc = createDocument(`<br />`);
+	assert(doc.root.firstChild.toString == `<br>`, doc.root.firstChild.toString);
 }
 
 static auto createDocument() {
@@ -885,26 +943,10 @@ struct DOMBuilder(Document) {
 	}
 
 	void onOpenEnd(HTMLString data) {
-		auto hash = tagHashOf(element_.tag);
-		switch (hash) {
-		case tagHashOf("area"):
-		case tagHashOf("base"):
-		case tagHashOf("basefont"):
-		case tagHashOf("br"):
-		case tagHashOf("col"):
-		case tagHashOf("hr"):
-		case tagHashOf("img"):
-		case tagHashOf("input"):
-		case tagHashOf("isindex"):
-		case tagHashOf("link"):
-		case tagHashOf("meta"):
-		case tagHashOf("param"):
-		case tagHashOf("wbr"):
-			onSelfClosing();
-			break;
-		default:
-			break;
-		}
+		// void elements have neither content nor a closing tag, so
+		// we're done w/ them on the end of the open tag
+		if (element_.isVoidElement)
+			element_ = element_.parent_;
 	}
 
 	void onClose(HTMLString data) {

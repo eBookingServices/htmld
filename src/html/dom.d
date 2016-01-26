@@ -471,12 +471,9 @@ struct Node {
 				}
 			}
 
-			// prefer isSelfClosing over isVoidElement to preserve xhtmlish <br />
-			if (isSelfClosing) {
-				app.put(" />");
-			} else if (isVoidElement) {
+			if (isVoidElement) {
 				app.put(">");
-			}  else {
+			} else {
 				app.put('>');
 				switch (tagHashOf(tag_))
 				{
@@ -534,7 +531,7 @@ struct Node {
 					app.put("\"");
 				}
 			}
-			if (isSelfClosing || isVoidElement) {
+			if (isVoidElement) {
 				app.put(">");
 			} else {
 				app.put("/>");
@@ -738,12 +735,10 @@ unittest
 	// void elements should not be self-closed
 	auto doc = createDocument(`<area><base><br><col>`);
 	assert(doc.root.outerHTML == `<root><area><base><br><col></root>`, doc.root.outerHTML);
-	// svg and mathml elements can be self-closed though
 	doc = createDocument(`<svg /><math /><svg></svg>`);
-	assert(doc.root.outerHTML == `<root><svg /><math /><svg></svg></root>`, doc.root.outerHTML);
-	// still preserve self-closed void tags for the sake of everyone's own preference
-	doc = createDocument(`<br />`);
-	assert(doc.root.outerHTML == `<root><br /></root>`, doc.root.outerHTML);
+	assert(doc.root.outerHTML == `<root><svg></svg><math></math><svg></svg></root>`, doc.root.outerHTML);
+	doc = createDocument(`<br /><div />`);
+	assert(doc.root.outerHTML == `<root><br><div></div></root>`, doc.root.outerHTML);
 }
 
 // toString prints elements with content as <tag attr="value"/>
@@ -751,7 +746,7 @@ unittest
 {
 	// self-closed element w/o content
 	auto doc = createDocument(`<svg />`);
-	assert(doc.root.firstChild.toString == `<svg>`, doc.root.firstChild.toString);
+	assert(doc.root.firstChild.toString == `<svg/>`, doc.root.firstChild.toString);
 	// elements w/ content
 	doc = createDocument(`<svg></svg>`);
 	assert(doc.root.firstChild.toString == `<svg/>`, doc.root.firstChild.toString);

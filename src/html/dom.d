@@ -718,8 +718,8 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 	return document;
 }
 
-unittest
-{
+
+unittest {
 	auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
 	assert(doc.root.outerHTML == `<root><html><body>&#160;</body></html></root>`);
 	doc = createDocument!(DOMCreateOptions.None)(`<html><body>&nbsp;</body></html>`);
@@ -730,8 +730,7 @@ unittest
 	assert(doc.root.outerHTML == `<root><style>&nbsp;</style></root>`, doc.root.outerHTML);
 }
 
-unittest
-{
+unittest {
 	// void elements should not be self-closed
 	auto doc = createDocument(`<area><base><br><col>`);
 	assert(doc.root.outerHTML == `<root><area><base><br><col></root>`, doc.root.outerHTML);
@@ -742,8 +741,7 @@ unittest
 }
 
 // toString prints elements with content as <tag attr="value"/>
-unittest
-{
+unittest {
 	// self-closed element w/o content
 	auto doc = createDocument(`<svg />`);
 	assert(doc.root.firstChild.toString == `<svg/>`, doc.root.firstChild.toString);
@@ -759,6 +757,7 @@ unittest
 	doc = createDocument(`<br />`);
 	assert(doc.root.firstChild.toString == `<br>`, doc.root.firstChild.toString);
 }
+
 
 static auto createDocument() {
 	auto document = Document();

@@ -62,6 +62,39 @@ private struct ChildrenForward(NodeType, alias Condition = null) {
 }
 
 
+private struct AncestorsForward(NodeType, alias Condition = null) {
+	this(NodeType* first) {
+		static if (!is(typeof(Condition) == typeof(null))) {
+			while (first && !Condition(first))
+				first = first.parent_;
+		}
+		curr_ = first;
+	}
+
+	bool empty() const {
+		return (curr_ == null);
+	}
+
+	auto front() {
+		return wrap(curr_);
+	}
+
+	void popFront() {
+		curr_ = curr_.parent_;
+
+		static if (!is(typeof(Condition) == typeof(null))) {
+			while (curr_) {
+				if (Condition(curr_))
+					break;
+				curr_ = curr_.parent_;
+			}
+		}
+	}
+
+	private NodeType* curr_;
+}
+
+
 // depth first traversal
 private struct DescendantsDFForward(NodeType, alias Condition = null) {
 	this(NodeType* first) {
@@ -631,6 +664,14 @@ struct Node {
 
 	auto find(HTMLString selector) {
 		return document_.querySelectorAll(selector, &this);
+	}
+
+	@property auto ancestors() const {
+		return AncestorsForward!(const(Node))(parent_);
+	}
+
+	@property auto ancestors() {
+		return AncestorsForward!Node(parent_);
 	}
 
 	@property auto descendants() const {

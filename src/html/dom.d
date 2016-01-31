@@ -6,6 +6,7 @@ import std.array;
 import std.ascii;
 import std.conv;
 import std.string;
+import std.range;
 
 import html.parser;
 import html.alloc;
@@ -150,10 +151,10 @@ private struct DescendantsDFForward(NodeType, alias Condition = null) {
 }
 
 
-private struct QuerySelectorAll(NodeType) {
-	this(Selector selector, NodeType* context) {
+private struct QuerySelectorMatcher(NodeType, Nodes) if (isInputRange!Nodes) {
+	this(Selector selector, Nodes nodes) {
 		selector_ = selector;
-		nodes_ = DescendantsDFForward!NodeType(context);
+		nodes_ = nodes;
 		popFront;
 	}
 
@@ -179,7 +180,7 @@ private struct QuerySelectorAll(NodeType) {
 	}
 
 	private NodeType* curr_;
-	private DescendantsDFForward!NodeType nodes_;
+	private Nodes nodes_;
 	private Selector selector_;
 }
 
@@ -296,13 +297,13 @@ struct Node {
 		parseHTML!(typeof(builder), parserOptions)(html, builder);
 	}
 
-	@property auto html() {
+	@property auto html() const {
 		Appender!HTMLString app;
 		innerHTML(app);
 		return app.data;
 	}
 
-	@property auto outerHTML() {
+	@property auto outerHTML() const {
 		Appender!HTMLString app;
 		outerHTML!(typeof(app))(app);
 		return app.data;
@@ -666,6 +667,46 @@ struct Node {
 		return document_.querySelectorAll(selector, &this);
 	}
 
+	auto find(Selector selector) const {
+		return document_.querySelectorAll(selector, &this);
+	}
+
+	auto find(Selector selector) {
+		return document_.querySelectorAll(selector, &this);
+	}
+
+	NodeWrapper!(const(Node)) closest(HTMLString selector) const {
+		auto rules = Selector.parse(selector);
+		return closest(rules);
+	}
+
+	NodeWrapper!Node closest(HTMLString selector) {
+		auto rules = Selector.parse(selector);
+		return closest(rules);
+	}
+
+	NodeWrapper!(const(Node)) closest(Selector selector) const {
+		if (selector.matches(&this))
+			return wrap(&this);
+
+		foreach (node; ancestors) {
+			if (selector.matches(node))
+				return node;
+		}
+		return NodeWrapper!(const(Node))(null);
+	}
+
+	NodeWrapper!Node closest(Selector selector) {
+		if (selector.matches(&this))
+			return wrap(&this);
+
+		foreach (node; ancestors) {
+			if (selector.matches(node))
+				return node;
+		}
+		return NodeWrapper!Node(null);
+	}
+
 	@property auto ancestors() const {
 		return AncestorsForward!(const(Node))(parent_);
 	}
@@ -767,7 +808,6 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 	return document;
 }
 
-
 unittest {
 	auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
 	assert(doc.root.outerHTML == `<root><html><body>&#160;</body></html></root>`);
@@ -806,6 +846,16 @@ unittest {
 	doc = createDocument(`<br />`);
 	assert(doc.root.firstChild.toString == `<br>`, doc.root.firstChild.toString);
 }
+
+unittest {
+	const doc = createDocument(`<html><body><div>&nbsp;</div></body></html>`);
+	assert(doc.root.find("html").front.outerHTML == `<html><body><div>&#160;</div></body></html>`);
+	assert(doc.root.find("html").front.find("div").front.outerHTML == `<div>&#160;</div>`);
+	assert(doc.root.find("body").front.outerHTML == `<body><div>&#160;</div></body>`);
+	assert(doc.root.find("body").front.closest("body").outerHTML == `<body><div>&#160;</div></body>`); // closest() tests self
+	assert(doc.root.find("body").front.closest("html").outerHTML == `<html><body><div>&#160;</div></body></html>`);
+}
+
 
 
 static auto createDocument() {
@@ -911,9 +961,24 @@ struct Document {
 		return DescendantsDFForward!(Node, (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
 	}
 
+	NodeWrapper!(const(Node)) querySelector(HTMLString selector, Node* context = null) const {
+		auto rules = Selector.parse(selector);
+		return querySelector(rules, context);
+	}
+
 	NodeWrapper!Node querySelector(HTMLString selector, Node* context = null) {
 		auto rules = Selector.parse(selector);
 		return querySelector(rules, context);
+	}
+
+	NodeWrapper!(const(Node)) querySelector(Selector selector, const(Node)* context = null) const {
+		auto top = context ? context : root_;
+
+		foreach(node; DescendantsDFForward!(const(Node), mixin(OnlyElements))(top)) {
+			if (selector.matches(node))
+				return node;
+		}
+		return NodeWrapper!(const(Node))(null);
 	}
 
 	NodeWrapper!Node querySelector(Selector selector, Node* context = null) {
@@ -926,24 +991,27 @@ struct Document {
 		return NodeWrapper!Node(null);
 	}
 
-	QuerySelectorAll!Node querySelectorAll(HTMLString selector, Node* context = null) {
+	alias QuerySelectorAllResult = QuerySelectorMatcher!(Node, DescendantsDFForward!Node);
+	alias QuerySelectorAllConstResult = QuerySelectorMatcher!(const(Node), DescendantsDFForward!(const(Node)));
+
+	QuerySelectorAllResult querySelectorAll(HTMLString selector, Node* context = null) {
 		auto rules = Selector.parse(selector);
 		return querySelectorAll(rules, context);
 	}
 
-	QuerySelectorAll!(const(Node)) querySelectorAll(HTMLString selector, const(Node)* context = null) const {
+	QuerySelectorAllConstResult querySelectorAll(HTMLString selector, const(Node)* context = null) const {
 		auto rules = Selector.parse(selector);
 		return querySelectorAll(rules, context);
 	}
 
-	QuerySelectorAll!(const(Node)) querySelectorAll(Selector selector, const(Node)* context = null) const {
+	QuerySelectorAllConstResult querySelectorAll(Selector selector, const(Node)* context = null) const {
 		auto top = context ? context : root_;
-		return QuerySelectorAll!(const(Node))(selector, top);
+		return QuerySelectorMatcher!(const(Node), DescendantsDFForward!(const(Node)))(selector, DescendantsDFForward!(const(Node))(top));
 	}
 
-	QuerySelectorAll!Node querySelectorAll(Selector selector, Node* context = null) {
+	QuerySelectorAllResult querySelectorAll(Selector selector, Node* context = null) {
 		auto top = context ? context : root_;
-		return QuerySelectorAll!Node(selector, top);
+		return QuerySelectorMatcher!(Node, DescendantsDFForward!Node)(selector, DescendantsDFForward!Node(top));
 	}
 
 	void toString(Appender)(ref Appender app) const {

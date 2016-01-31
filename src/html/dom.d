@@ -625,6 +625,14 @@ struct Node {
 		return attrs_;
 	}
 
+	auto find(HTMLString selector) const {
+		return document_.querySelectorAll(selector, &this);
+	}
+
+	auto find(HTMLString selector) {
+		return document_.querySelectorAll(selector, &this);
+	}
+
 	@property auto descendants() const {
 		return DescendantsDFForward!(const(Node))(firstChild_);
 	}
@@ -880,6 +888,16 @@ struct Document {
 	QuerySelectorAll!Node querySelectorAll(HTMLString selector, Node* context = null) {
 		auto rules = Selector.parse(selector);
 		return querySelectorAll(rules, context);
+	}
+
+	QuerySelectorAll!(const(Node)) querySelectorAll(HTMLString selector, const(Node)* context = null) const {
+		auto rules = Selector.parse(selector);
+		return querySelectorAll(rules, context);
+	}
+
+	QuerySelectorAll!(const(Node)) querySelectorAll(Selector selector, const(Node)* context = null) const {
+		auto top = context ? context : root_;
+		return QuerySelectorAll!(const(Node))(selector, top);
 	}
 
 	QuerySelectorAll!Node querySelectorAll(Selector selector, Node* context = null) {
@@ -1294,7 +1312,7 @@ private struct Rule {
 				auto parent = element.parent_;
 				if (!parent)
 					return false;
-				auto sibling = parent.firstChild_;
+				const(Node)* sibling = parent.firstChild_;
 				while (sibling) {
 					if ((sibling != element) && sibling.isElementNode)
 						return false;
@@ -1636,7 +1654,7 @@ struct Selector {
 		return selector;
 	}
 
-	bool matches(NodeType)(NodeType element) {
+	bool matches(NodeType)(const(NodeType)* element) {
 		if (rules_.empty)
 			return false;
 
@@ -1648,7 +1666,7 @@ struct Selector {
 					return false;
 				break;
 			case Descendant:
-				auto parent = element.parent_;
+				const(Node)* parent = element.parent_;
 				while (parent) {
 					if (rule.matches(parent)) {
 						element = parent;

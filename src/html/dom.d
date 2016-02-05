@@ -778,6 +778,10 @@ struct Node {
 		Node* c = alloc.alloc();
 		*c = Node(newdocument, tag_);
 		c.flags_ = flags_;
+		foreach(HTMLString attr, HTMLString value; attrs_) {
+			c.attrs_[attr] = value;
+		}
+
 		Node* cur = firstChild_;
 		while(cur != null) {
 			Node* newChild = cur.clone(newdocument, alloc);
@@ -1052,18 +1056,24 @@ private:
 ///
 unittest {
 	//import htmld: createDocument;
-	const(char)[] s = "<parent><child/>andsometext</parent>";
+	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
 	auto doc = createDocument(s);
-	s = doc.root().html();
+	s = doc.root().html(); // normalize
 	auto c = doc.clone(doc.root());
 	assert(s == c.html);
 	assert(s == doc.root().html());
 	auto other = createDocument();
-	c = other.clone(doc.root());
-	assert(s == c.html);
-	other.root().appendChild(c);
+	c = other.clone(doc.root().children.front);
+	assert(s == c.outerHTML);
+	
+	s = `<parent attr="value"><child></child>andsometext<parent attr="value"><child></child>andsometext</parent></parent>`;
+	c.appendChild(other.clone(c));
+	assert(s == c.outerHTML);
+
 	s = "<root>"~s~"</root>";
-	assert(s == other.root().html());
+	other.root().appendChild(c);
+
+	assert(s == other.root().outerHTML());
 }
 
 

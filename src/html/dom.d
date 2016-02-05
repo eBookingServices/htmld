@@ -774,6 +774,23 @@ struct Node {
 		return type == NodeTypes.ProcessingInstruction;
 	}
 
+	Node* clone(Document* newdocument, PageAllocator!(Node, 1024) alloc) {
+		Node* c = alloc.alloc();
+		*c = Node(newdocument, tag_);
+		c.flags_ = flags_;
+		foreach(HTMLString attr, HTMLString value; attrs_) {
+			c.attrs_[attr] = value;
+		}
+
+		Node* cur = firstChild_;
+		while(cur != null) {
+			Node* newChild = cur.clone(newdocument, alloc);
+			c.appendChild(newChild);
+			cur = cur.next_;
+		}
+		return c;
+	}
+
 package:
 	enum TypeMask	= 0x7;
 	enum TypeShift	= 0;
@@ -796,7 +813,6 @@ package:
 
 	Document* document_;
 }
-
 
 auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source) {
 	enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
@@ -867,6 +883,10 @@ static auto createDocument() {
 
 
 struct Document {
+	auto clone(Node* source) {
+		return source.clone(&this, alloc_);
+	}
+
 	auto createElement(HTMLString tagName, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, tagName);
@@ -1032,6 +1052,30 @@ private:
 	Node* root_;
 	PageAllocator!(Node, 1024) alloc_;
 }
+
+///
+unittest {
+	//import htmld: createDocument;
+	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
+	auto doc = createDocument(s);
+	s = doc.root().html(); // normalize
+	auto c = doc.clone(doc.root());
+	assert(s == c.html);
+	assert(s == doc.root().html());
+	auto other = createDocument();
+	c = other.clone(doc.root().children.front);
+	assert(s == c.outerHTML);
+	
+	s = `<parent attr="value"><child></child>andsometext<parent attr="value"><child></child>andsometext</parent></parent>`;
+	c.appendChild(other.clone(c));
+	assert(s == c.outerHTML);
+
+	s = "<root>"~s~"</root>";
+	other.root().appendChild(c);
+
+	assert(s == other.root().outerHTML());
+}
+
 
 
 struct DOMBuilder(Document) {

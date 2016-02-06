@@ -1062,7 +1062,13 @@ private:
 }
 
 version(unittest) {
-	import std.stdio;
+	import std.stdio: writeln;
+	import core.exception: AssertError;
+	class DUnitIsBetter: AssertError {
+		this(string msg, string file, size_t line) {
+			super(msg,file,line);
+		}
+	}
 	shared static this() {
 		import core.runtime: Runtime, ModuleInfo;
 		Runtime.moduleUnitTester = function() {
@@ -1077,7 +1083,7 @@ version(unittest) {
 						try
 						{
 							fp();
-						} catch( Throwable e )
+						} catch( DUnitIsBetter e )
 						{
 							writeln(e.msg," at ",e.file,":",e.line);
 							return false;
@@ -1098,7 +1104,7 @@ version(unittest) {
 				writeln(expected);
 				writeln("We got:");
 				writeln(actual);
-				throw new Exception("fail",file,line);
+				throw new DUnitIsBetter("fail",file,line);
 			}
 		}
 	}
@@ -1120,10 +1126,11 @@ unittest {
 	assertEqual(me.html,s);
 	assertEqual(doc.root().html(),s);
 	
-	auto other = createDocument();	
-	auto them = other.clone(doc.root());
+	auto other = createDocument("<other/>");	
+	auto them = other.root().children.front;
+	them.appendChild(other.clone(them));
 	
-	assertEqual(them.html,s);
+	assertEqual(them.outerHTML,"<other><other></other></other>");
 
 	import std.regex: regex, replaceAll;
 	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
@@ -1137,42 +1144,48 @@ unittest {
 	them.appendChild(other.clone(me));
 
 	s = clean(
-		`<parent shoop="woop" attr="value">
+		`<parent attr="value">
+<child></child>andsometext
+<parent shoop="woop" attr="value">
   <child></child>andsometext
-  <parent attr="value">
+</parent>
+</parent>`);
+	s = clean(`<other>
+  <other></other>
+  <parent shoop="woop" attr="value">
     <child></child>andsometext
   </parent>
-</parent>`);
+</other>`);
 	assertEqual(them.outerHTML,s);
-
-	other.root().appendChild(other.clone(me));
-	me.attr("still","here");
 
 	assertEqual(other.root().outerHTML(),
 				"<root>"~s~"</root>");
 
+	other.root().appendChild(other.clone(me));
+	me.attr("still","here");
+
+	assertEqual(other.root.outerHTML,
+				clean(`<root>
+<other>
+  <other></other>
+  <parent shoop="woop" attr="value">
+    <child></child>andsometext
+  </parent>
+</other>
+<parent shoop="woop" attr="value">
+  <child></child>andsometext
+</parent>
+</root>`));
 	Node* a = doc.root().firstChild;
 	Node* b = other.root().firstChild;
+	b.attr("jutsu","henge");
 	b.appendChild(b.clone());
 	a.appendChild(a.clone(b));
 
 	assertEqual(
 		doc.root.outerHTML,
-		clean(`<root>
-<parent attr="value">
-  <child></child>andsometext
-  <parent attr="value">
-    <child></child>andsometext
-    <parent attr="value">
-      <child></child>andsometext</parent>
-    <parent attr="value"><child></child>andsometext
-      <parent attr="value">
-        <child></child>andsometext
-      </parent>
-    </parent>
-  </parent>
-</parent>
-</root>`));
+		clean(`<root><parent attr="value"><child></child>andsometext<other><other></other><parent shoop="woop" attr="value"><child></child>andsometext</parent><other><other></other><parent shoop="woop" attr="value"><child></child>andsometext</parent></other></other></parent></root>
+`));
 
 }
 

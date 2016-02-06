@@ -1062,9 +1062,9 @@ private:
 }
 
 version(unittest) {
+	import std.stdio;
 	shared static this() {
 		import core.runtime: Runtime, ModuleInfo;
-		import std.stdio;
 		Runtime.moduleUnitTester = function() {
 			foreach( m; ModuleInfo )
 			{
@@ -1088,32 +1088,42 @@ version(unittest) {
 			return true;
 		};
 	}
+
+	template assertEqual(A,B) {
+		void assertEqual(A actual, B expected,
+						 string file = __FILE__,
+						 size_t line = __LINE__) {
+			if(actual != expected) {
+				writeln("Expected:");
+				writeln(expected);
+				writeln("We got:");
+				writeln(actual);
+				throw new Exception("fail",file,line);
+			}
+		}
+	}
+
+
 }
+
+
 
 ///
 unittest {
 	import std.stdio;
 
-	void assertEqual(A,B)(A actual, B expected) {
-		if(actual != expected) {
-			writeln("Expected:");
-			writeln(expected);
-			writeln("We got:");
-			writeln(actual);
-			throw new Exception("fail");
-		}
-	}
-
 	//import htmld: createDocument;
 	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
 	auto doc = createDocument(s);
 	s = doc.root().html(); // normalize
-	auto c = doc.clone(doc.root());
-	assert(s == c.html);
-	assert(s == doc.root().html());
-	auto other = createDocument();
-	c = other.clone(doc.root().children.front);
-	assert(s == c.outerHTML);
+	auto me = doc.clone(doc.root());
+	assertEqual(me.html,s);
+	assertEqual(doc.root().html(),s);
+	
+	auto other = createDocument();	
+	auto them = other.clone(doc.root());
+	
+	assertEqual(them.html,s);
 
 	import std.regex: regex, replaceAll;
 	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
@@ -1121,19 +1131,22 @@ unittest {
 		return s.replaceAll(noformat,"");
 	}
 
-	c.attr("shoop", "woop");
+	me = me.children.front;
+
+	me.attr("shoop", "woop");
+	them.appendChild(other.clone(me));
 
 	s = clean(
-		`<parent attr="value">
+		`<parent shoop="woop" attr="value">
   <child></child>andsometext
-  <kiddo attr="value">
+  <parent attr="value">
     <child></child>andsometext
-  </kiddo>
+  </parent>
 </parent>`);
-	c.appendChild(other.clone(c));
-	assertEqual(c.outerHTML,s);
+	assertEqual(them.outerHTML,s);
 
-	other.root().appendChild(c);
+	other.root().appendChild(other.clone(me));
+	me.attr("still","here");
 
 	assertEqual(other.root().outerHTML(),
 				"<root>"~s~"</root>");

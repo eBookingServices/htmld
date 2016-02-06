@@ -1062,6 +1062,9 @@ private:
 }
 
 version(unittest) {
+	/* just a quick and dirty unittest thing, so I can actually read the
+	   errors that are going on without a huge useless stack trace 
+	   in my face */
 	import std.stdio: writeln;
 	import core.exception: AssertError;
 	class DUnitIsBetter: AssertError {
@@ -1108,11 +1111,7 @@ version(unittest) {
 			}
 		}
 	}
-
-
 }
-
-
 
 ///
 unittest {
@@ -1184,8 +1183,23 @@ unittest {
 
 	assertEqual(
 		doc.root.outerHTML,
-		clean(`<root><parent attr="value"><child></child>andsometext<other><other></other><parent shoop="woop" attr="value"><child></child>andsometext</parent><other><other></other><parent shoop="woop" attr="value"><child></child>andsometext</parent></other></other></parent></root>
-`));
+		clean(`<root>
+<parent attr="value">
+  <child></child>andsometext
+  <other jutsu="henge">
+    <other></other>
+    <parent shoop="woop" attr="value">
+      <child></child>andsometext
+    </parent>
+    <other jutsu="henge">
+      <other></other>
+      <parent shoop="woop" attr="value">
+        <child></child>andsometext
+      </parent>
+    </other>
+  </other>
+</parent>
+</root>`));
 
 }
 

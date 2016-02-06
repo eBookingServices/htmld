@@ -1061,41 +1061,49 @@ private:
 	PageAllocator!(Node, 1024) alloc_;
 }
 
-///
-unittest {
-	import core.runtime: Runtime, ModuleInfo;
-	import std.stdio;
-	Runtime.moduleUnitTester = function() {
-		foreach( m; ModuleInfo )
-        {
-            if( m )
-            {
-                auto fp = m.unitTest;
+version(unittest) {
+	shared static this() {
+		import core.runtime: Runtime, ModuleInfo;
+		import std.stdio;
+		Runtime.moduleUnitTester = function() {
+			foreach( m; ModuleInfo )
+			{
+				if( m )
+				{
+					auto fp = m.unitTest;
 
-                if( fp )
-                {
-                    try
-                    {
-                        fp();
-					} catch( Throwable e )
+					if( fp )
 					{
-						writeln("Dyin",typeof(e)
-						return false;
+						try
+						{
+							fp();
+						} catch( Throwable e )
+						{
+							writeln(e.msg," at ",e.file,":",e.line);
+							return false;
+						}
 					}
 				}
 			}
-		}
-		return true;
+			return true;
+		};
 	}
+}
+
+///
+unittest {
+	import std.stdio;
 
 	void assertEqual(A,B)(A actual, B expected) {
-		if(a != b) {
+		if(actual != expected) {
 			writeln("Expected:");
 			writeln(expected);
 			writeln("We got:");
 			writeln(actual);
-			throw new AssertionError("fail");
-	
+			throw new Exception("fail");
+		}
+	}
+
 	//import htmld: createDocument;
 	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
 	auto doc = createDocument(s);
@@ -1109,33 +1117,35 @@ unittest {
 
 	import std.regex: regex, replaceAll;
 	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
-	void clean(auto s) {
-		s = s.replaceAll(noformat,"");
+	typeof(s) clean(typeof(s) s) {
+		return s.replaceAll(noformat,"");
 	}
 
-	c.tag = "kiddo";
-	
-	s = `<parent attr="value">
+	c.attr("shoop", "woop");
+
+	s = clean(
+		`<parent attr="value">
   <child></child>andsometext
   <kiddo attr="value">
     <child></child>andsometext
   </kiddo>
-</parent>`;
-	clean();
+</parent>`);
 	c.appendChild(other.clone(c));
-	assert(s == c.outerHTML);
+	assertEqual(c.outerHTML,s);
 
-	s = "<root>"~s~"</root>";
 	other.root().appendChild(c);
 
-	assert(s == other.root().outerHTML());
+	assertEqual(other.root().outerHTML(),
+				"<root>"~s~"</root>");
 
 	Node* a = doc.root().firstChild;
 	Node* b = other.root().firstChild;
 	b.appendChild(b.clone());
 	a.appendChild(a.clone(b));
 
-	s = `<root>
+	assertEqual(
+		doc.root.outerHTML,
+		clean(`<root>
 <parent attr="value">
   <child></child>andsometext
   <parent attr="value">
@@ -1149,10 +1159,8 @@ unittest {
     </parent>
   </parent>
 </parent>
-</root>`;
-	writeln(s);
-	writeln(doc.root().outerHTML());
-	assert(doc.root().outerHTML() == s);
+</root>`));
+
 }
 
 

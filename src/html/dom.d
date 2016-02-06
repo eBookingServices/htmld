@@ -791,6 +791,14 @@ struct Node {
 		return c;
 	}
 
+	Node* clone(Node* oldnode) {
+		return document_.clone(oldnode);
+	}
+
+	Node* clone() {
+		return document_.clone(&this);
+	}
+
 package:
 	enum TypeMask	= 0x7;
 	enum TypeShift	= 0;
@@ -1055,6 +1063,39 @@ private:
 
 ///
 unittest {
+	import core.runtime: Runtime, ModuleInfo;
+	import std.stdio;
+	Runtime.moduleUnitTester = function() {
+		foreach( m; ModuleInfo )
+        {
+            if( m )
+            {
+                auto fp = m.unitTest;
+
+                if( fp )
+                {
+                    try
+                    {
+                        fp();
+					} catch( Throwable e )
+					{
+						writeln("Dyin",typeof(e)
+						return false;
+					}
+				}
+			}
+		}
+		return true;
+	}
+
+	void assertEqual(A,B)(A actual, B expected) {
+		if(a != b) {
+			writeln("Expected:");
+			writeln(expected);
+			writeln("We got:");
+			writeln(actual);
+			throw new AssertionError("fail");
+	
 	//import htmld: createDocument;
 	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
 	auto doc = createDocument(s);
@@ -1065,8 +1106,22 @@ unittest {
 	auto other = createDocument();
 	c = other.clone(doc.root().children.front);
 	assert(s == c.outerHTML);
+
+	import std.regex: regex, replaceAll;
+	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
+	void clean(auto s) {
+		s = s.replaceAll(noformat,"");
+	}
+
+	c.tag = "kiddo";
 	
-	s = `<parent attr="value"><child></child>andsometext<parent attr="value"><child></child>andsometext</parent></parent>`;
+	s = `<parent attr="value">
+  <child></child>andsometext
+  <kiddo attr="value">
+    <child></child>andsometext
+  </kiddo>
+</parent>`;
+	clean();
 	c.appendChild(other.clone(c));
 	assert(s == c.outerHTML);
 
@@ -1074,6 +1129,30 @@ unittest {
 	other.root().appendChild(c);
 
 	assert(s == other.root().outerHTML());
+
+	Node* a = doc.root().firstChild;
+	Node* b = other.root().firstChild;
+	b.appendChild(b.clone());
+	a.appendChild(a.clone(b));
+
+	s = `<root>
+<parent attr="value">
+  <child></child>andsometext
+  <parent attr="value">
+    <child></child>andsometext
+    <parent attr="value">
+      <child></child>andsometext</parent>
+    <parent attr="value"><child></child>andsometext
+      <parent attr="value">
+        <child></child>andsometext
+      </parent>
+    </parent>
+  </parent>
+</parent>
+</root>`;
+	writeln(s);
+	writeln(doc.root().outerHTML());
+	assert(doc.root().outerHTML() == s);
 }
 
 

@@ -891,8 +891,15 @@ static auto createDocument() {
 
 
 struct Document {
-	auto clone(Node* source) {
+	Node* clone(Node* source) {
 		return source.clone(&this, alloc_);
+	}
+
+	Document clone() {
+		Document other = Document();
+		other.init();
+		other.root(other.clone(this.root_));
+		return other;
 	}
 
 	auto createElement(HTMLString tagName, Node* parent = null) {
@@ -1201,9 +1208,10 @@ unittest {
 </parent>
 </root>`));
 
+	other = doc.clone();
+	assertEqual(doc.toString(),other.toString());
+	
 }
-
-
 
 struct DOMBuilder(Document) {
 	this(ref Document document, Node* parent = null) {

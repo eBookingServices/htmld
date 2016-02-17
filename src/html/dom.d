@@ -774,25 +774,22 @@ struct Node {
 		return type == NodeTypes.ProcessingInstruction;
 	}
 
-	Node* clone(Document* newdocument, PageAllocator!(Node, 1024) alloc) {
-		Node* c = alloc.alloc();
-		*c = Node(newdocument, tag_);
-		c.flags_ = flags_;
-		foreach(HTMLString attr, HTMLString value; attrs_) {
-			c.attrs_[attr] = value;
-		}
+	package Node* clone(Document* document) const {
+		auto node = document.alloc.alloc();
+		*node = Node(document, tag_);
+		node.flags_ = flags_;
 
-		Node* cur = firstChild_;
-		while(cur != null) {
-			Node* newChild = cur.clone(newdocument, alloc);
-			c.appendChild(newChild);
-			cur = cur.next_;
-		}
-		return c;
-	}
+		foreach (HTMLString attr, HTMLString value; attrs_)
+			node.attrs_[attr] = value;
 
-	Node* clone(Node* oldnode) {
-		return document_.clone(oldnode);
+		const(Node)* current = firstChild_;
+
+		while (current != null) {
+			auto newChild = current.clone(document);
+			node.appendChild(newChild);
+			current = current.next_;
+		}
+		return node;
 	}
 
 	Node* clone() {
@@ -891,17 +888,6 @@ static auto createDocument() {
 
 
 struct Document {
-	Node* clone(Node* source) {
-		return source.clone(&this, alloc_);
-	}
-
-	Document clone() {
-		Document other = Document();
-		other.init();
-		other.root(other.clone(this.root_));
-		return other;
-	}
-
 	auto createElement(HTMLString tagName, Node* parent = null) {
 		auto node = alloc_.alloc();
 		*node = Node(&this, tagName);
@@ -958,6 +944,17 @@ struct Document {
 
 	void destroyNode(Node* node) {
 		alloc_.free(node);
+	}
+
+	Node* clone(const(Node)* source) {
+		return source.clone(&this);
+	}
+
+	Document clone() const {
+		Document other = Document();
+		other.init();
+		other.root(other.clone(this.root_));
+		return other;
 	}
 
 	@property auto root() {
@@ -1059,6 +1056,10 @@ struct Document {
 		return app.data;
 	}
 
+	package ref auto alloc() {
+		return alloc_;
+	}
+
 private:
 	void init() {
 		alloc_.init;
@@ -1068,150 +1069,38 @@ private:
 	PageAllocator!(Node, 1024) alloc_;
 }
 
-version(unittest) {
-	/* just a quick and dirty unittest thing, so I can actually read the
-	   errors that are going on without a huge useless stack trace 
-	   in my face */
-	import std.stdio: writeln;
-	import core.exception: AssertError;
-	class DUnitIsBetter: AssertError {
-		this(string msg, string file, size_t line) {
-			super(msg,file,line);
-		}
-	}
-	shared static this() {
-		import core.runtime: Runtime, ModuleInfo;
-		Runtime.moduleUnitTester = function() {
-			foreach( m; ModuleInfo )
-			{
-				if( m )
-				{
-					auto fp = m.unitTest;
 
-					if( fp )
-					{
-						try
-						{
-							fp();
-						} catch( DUnitIsBetter e )
-						{
-							writeln(e.msg," at ",e.file,":",e.line);
-							return false;
-						}
-					}
-				}
-			}
-			return true;
-		};
-	}
-
-	template assertEqual(A,B) {
-		void assertEqual(A actual, B expected,
-						 string file = __FILE__,
-						 size_t line = __LINE__) {
-			if(actual != expected) {
-				writeln("Expected:");
-				writeln(expected);
-				writeln("We got:");
-				writeln(actual);
-				throw new DUnitIsBetter("fail",file,line);
-			}
-		}
-	}
-}
-
-///
 unittest {
 	import std.stdio;
 
-	//import htmld: createDocument;
-	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
-	auto doc = createDocument(s);
-	s = doc.root().html(); // normalize
-	auto me = doc.clone(doc.root());
-	assertEqual(me.html,s);
-	assertEqual(doc.root().html(),s);
+	const(char)[] src = `<parent attr="value"><child></child>text</parent>`;
+	auto doc = createDocument(src);
+	assert(doc.root.html == src, doc.root.html);
+
+	// basic cloning
+	auto cloned = doc.clone(doc.root);
+	assert(cloned.html == src, cloned.html);
+	assert(doc.root.html == src, cloned.html);
 	
-	auto other = createDocument("<other/>");	
-	auto them = other.root().children.front;
-	them.appendChild(other.clone(them));
-	
-	assertEqual(them.outerHTML,"<other><other></other></other>");
+	assert(!cloned.find("child").empty);
+	assert(!cloned.find("parent").empty);
 
-	import std.regex: regex, replaceAll;
-	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
-	typeof(s) clean(typeof(s) s) {
-		return s.replaceAll(noformat,"");
-	}
+	// clone mutation
+	auto child = cloned.find("child").front.clone;
+	child.attr("attr", "test");
+	cloned.find("parent").front.appendChild(child);
+	assert(cloned.html == `<parent attr="value"><child></child>text<child attr="test"></child></parent>`, cloned.html);
+	assert(doc.root.html == src, doc.root.html);
 
-	me = me.children.front;
+	child.text = "text";
+	assert(cloned.html == `<parent attr="value"><child></child>text<child attr="test">text</child></parent>`, cloned.html);
+	assert(doc.root.html == src, doc.root.html);
 
-	me.attr("shoop", "woop");
-	them.appendChild(other.clone(me));
-
-	s = clean(
-		`<parent attr="value">
-<child></child>andsometext
-<parent shoop="woop" attr="value">
-  <child></child>andsometext
-</parent>
-</parent>`);
-	s = clean(`<other>
-  <other></other>
-  <parent shoop="woop" attr="value">
-    <child></child>andsometext
-  </parent>
-</other>`);
-	assertEqual(them.outerHTML,s);
-
-	assertEqual(other.root().outerHTML(),
-				"<root>"~s~"</root>");
-
-	other.root().appendChild(other.clone(me));
-	me.attr("still","here");
-
-	assertEqual(other.root.outerHTML,
-				clean(`<root>
-<other>
-  <other></other>
-  <parent shoop="woop" attr="value">
-    <child></child>andsometext
-  </parent>
-</other>
-<parent shoop="woop" attr="value">
-  <child></child>andsometext
-</parent>
-</root>`));
-	Node* a = doc.root().firstChild;
-	Node* b = other.root().firstChild;
-	b.attr("jutsu","henge");
-	b.appendChild(b.clone());
-	a.appendChild(a.clone(b));
-
-	assertEqual(
-		doc.root.outerHTML,
-		clean(`<root>
-<parent attr="value">
-  <child></child>andsometext
-  <other jutsu="henge">
-    <other></other>
-    <parent shoop="woop" attr="value">
-      <child></child>andsometext
-    </parent>
-    <other jutsu="henge">
-      <other></other>
-      <parent shoop="woop" attr="value">
-        <child></child>andsometext
-      </parent>
-    </other>
-  </other>
-</parent>
-</root>`));
-
-	other = doc.clone();
-	assertEqual(doc.toString(),other.toString());
-	
+	// document cloning
+	auto docc = doc.clone;
+	assert(docc.root.html == doc.root.html, docc.root.html);
 }
+
 
 struct DOMBuilder(Document) {
 	this(ref Document document, Node* parent = null) {

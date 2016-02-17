@@ -791,6 +791,14 @@ struct Node {
 		return c;
 	}
 
+	Node* clone(Node* oldnode) {
+		return document_.clone(oldnode);
+	}
+
+	Node* clone() {
+		return document_.clone(&this);
+	}
+
 package:
 	enum TypeMask	= 0x7;
 	enum TypeShift	= 0;
@@ -883,8 +891,15 @@ static auto createDocument() {
 
 
 struct Document {
-	auto clone(Node* source) {
+	Node* clone(Node* source) {
 		return source.clone(&this, alloc_);
+	}
+
+	Document clone() {
+		Document other = Document();
+		other.init();
+		other.root(other.clone(this.root_));
+		return other;
 	}
 
 	auto createElement(HTMLString tagName, Node* parent = null) {
@@ -1053,30 +1068,150 @@ private:
 	PageAllocator!(Node, 1024) alloc_;
 }
 
+version(unittest) {
+	/* just a quick and dirty unittest thing, so I can actually read the
+	   errors that are going on without a huge useless stack trace 
+	   in my face */
+	import std.stdio: writeln;
+	import core.exception: AssertError;
+	class DUnitIsBetter: AssertError {
+		this(string msg, string file, size_t line) {
+			super(msg,file,line);
+		}
+	}
+	shared static this() {
+		import core.runtime: Runtime, ModuleInfo;
+		Runtime.moduleUnitTester = function() {
+			foreach( m; ModuleInfo )
+			{
+				if( m )
+				{
+					auto fp = m.unitTest;
+
+					if( fp )
+					{
+						try
+						{
+							fp();
+						} catch( DUnitIsBetter e )
+						{
+							writeln(e.msg," at ",e.file,":",e.line);
+							return false;
+						}
+					}
+				}
+			}
+			return true;
+		};
+	}
+
+	template assertEqual(A,B) {
+		void assertEqual(A actual, B expected,
+						 string file = __FILE__,
+						 size_t line = __LINE__) {
+			if(actual != expected) {
+				writeln("Expected:");
+				writeln(expected);
+				writeln("We got:");
+				writeln(actual);
+				throw new DUnitIsBetter("fail",file,line);
+			}
+		}
+	}
+}
+
 ///
 unittest {
+	import std.stdio;
+
 	//import htmld: createDocument;
 	const(char)[] s = `<parent attr="value"><child/>andsometext</parent>`;
 	auto doc = createDocument(s);
 	s = doc.root().html(); // normalize
-	auto c = doc.clone(doc.root());
-	assert(s == c.html);
-	assert(s == doc.root().html());
-	auto other = createDocument();
-	c = other.clone(doc.root().children.front);
-	assert(s == c.outerHTML);
+	auto me = doc.clone(doc.root());
+	assertEqual(me.html,s);
+	assertEqual(doc.root().html(),s);
 	
-	s = `<parent attr="value"><child></child>andsometext<parent attr="value"><child></child>andsometext</parent></parent>`;
-	c.appendChild(other.clone(c));
-	assert(s == c.outerHTML);
+	auto other = createDocument("<other/>");	
+	auto them = other.root().children.front;
+	them.appendChild(other.clone(them));
+	
+	assertEqual(them.outerHTML,"<other><other></other></other>");
 
-	s = "<root>"~s~"</root>";
-	other.root().appendChild(c);
+	import std.regex: regex, replaceAll;
+	auto noformat = regex(`\s*\n\s*`); // can't kill spaces between attrs
+	typeof(s) clean(typeof(s) s) {
+		return s.replaceAll(noformat,"");
+	}
 
-	assert(s == other.root().outerHTML());
+	me = me.children.front;
+
+	me.attr("shoop", "woop");
+	them.appendChild(other.clone(me));
+
+	s = clean(
+		`<parent attr="value">
+<child></child>andsometext
+<parent shoop="woop" attr="value">
+  <child></child>andsometext
+</parent>
+</parent>`);
+	s = clean(`<other>
+  <other></other>
+  <parent shoop="woop" attr="value">
+    <child></child>andsometext
+  </parent>
+</other>`);
+	assertEqual(them.outerHTML,s);
+
+	assertEqual(other.root().outerHTML(),
+				"<root>"~s~"</root>");
+
+	other.root().appendChild(other.clone(me));
+	me.attr("still","here");
+
+	assertEqual(other.root.outerHTML,
+				clean(`<root>
+<other>
+  <other></other>
+  <parent shoop="woop" attr="value">
+    <child></child>andsometext
+  </parent>
+</other>
+<parent shoop="woop" attr="value">
+  <child></child>andsometext
+</parent>
+</root>`));
+	Node* a = doc.root().firstChild;
+	Node* b = other.root().firstChild;
+	b.attr("jutsu","henge");
+	b.appendChild(b.clone());
+	a.appendChild(a.clone(b));
+
+	assertEqual(
+		doc.root.outerHTML,
+		clean(`<root>
+<parent attr="value">
+  <child></child>andsometext
+  <other jutsu="henge">
+    <other></other>
+    <parent shoop="woop" attr="value">
+      <child></child>andsometext
+    </parent>
+    <other jutsu="henge">
+      <other></other>
+      <parent shoop="woop" attr="value">
+        <child></child>andsometext
+      </parent>
+    </other>
+  </other>
+</parent>
+</root>`));
+
+	other = doc.clone();
+	assertEqual(doc.toString(),other.toString());
+	
 }
-
-
 
 struct DOMBuilder(Document) {
 	this(ref Document document, Node* parent = null) {

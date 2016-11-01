@@ -23,6 +23,14 @@ package bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
 }
 
 
+package size_t quickHashOf(const(char)[] x) {
+	size_t hash = 5381;
+	foreach(i; 0..x.length)
+		hash = (hash * 33) ^ cast(size_t)(x.ptr[i]);
+	return hash;
+}
+
+
 package size_t tagHashOf(const(char)[] x) {
 	size_t hash = 5381;
 	foreach(i; 0..x.length)

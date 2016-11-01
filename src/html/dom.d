@@ -1081,7 +1081,7 @@ unittest {
 	auto cloned = doc.clone(doc.root);
 	assert(cloned.html == src, cloned.html);
 	assert(doc.root.html == src, cloned.html);
-	
+
 	assert(!cloned.find("child").empty);
 	assert(!cloned.find("parent").empty);
 
@@ -1341,62 +1341,62 @@ private struct Rule {
 
 		if (flags_ & Flags.HasPseudo) {
 			switch (pseudo_) {
-			case hashOf("checked"):
+			case quickHashOf("checked"):
 				if (!element.hasAttr("checked"))
 					return false;
 				break;
 
-			case hashOf("enabled"):
+			case quickHashOf("enabled"):
 				if (element.hasAttr("disabled"))
 					return false;
 				break;
 
-			case hashOf("disabled"):
+			case quickHashOf("disabled"):
 				if (!element.hasAttr("disabled"))
 					return false;
 				break;
 
-			case hashOf("empty"):
+			case quickHashOf("empty"):
 				if (element.firstChild_)
 					return false;
 				break;
 
-			case hashOf("optional"):
+			case quickHashOf("optional"):
 				if (element.hasAttr("required"))
 					return false;
 				break;
 
-			case hashOf("read-only"):
+			case quickHashOf("read-only"):
 				if (!element.hasAttr("readonly"))
 					return false;
 				break;
 
-			case hashOf("read-write"):
+			case quickHashOf("read-write"):
 				if (element.hasAttr("readonly"))
 					return false;
 				break;
 
-			case hashOf("required"):
+			case quickHashOf("required"):
 				if (!element.hasAttr("required"))
 					return false;
 				break;
 
-			case hashOf("lang"):
+			case quickHashOf("lang"):
 				if (element.attr("lang") != pseudoArg_)
 					return false;
 				break;
 
-			case hashOf("first-child"):
+			case quickHashOf("first-child"):
 				if (!element.parent_ || (element.parent_.firstChild != element))
 					return false;
 				break;
 
-			case hashOf("last-child"):
+			case quickHashOf("last-child"):
 				if (!element.parent_ || (element.parent_.lastChild != element))
 					return false;
 				break;
 
-			case hashOf("first-of-type"):
+			case quickHashOf("first-of-type"):
 				auto sibling = element.previousSibling;
 				while (sibling) {
 					if (sibling.isElementNode && sibling.tag.equalsCI(element.tag))
@@ -1405,7 +1405,7 @@ private struct Rule {
 				}
 				break;
 
-			case hashOf("last-of-type"):
+			case quickHashOf("last-of-type"):
 				auto sibling = element.nextSibling;
 				while (sibling) {
 					if (sibling.isElementNode && sibling.tag.equalsCI(element.tag))
@@ -1414,7 +1414,7 @@ private struct Rule {
 				}
 				break;
 
-			case hashOf("nth-child"):
+			case quickHashOf("nth-child"):
 				auto ith = 1;
 				auto sibling = element.previousSibling;
 				while (sibling) {
@@ -1428,7 +1428,7 @@ private struct Rule {
 					return false;
 				break;
 
-			case hashOf("nth-last-child"):
+			case quickHashOf("nth-last-child"):
 				auto ith = 1;
 				auto sibling = element.nextSibling;
 				while (sibling) {
@@ -1442,7 +1442,7 @@ private struct Rule {
 					return false;
 				break;
 
-			case hashOf("nth-of-type"):
+			case quickHashOf("nth-of-type"):
 				auto ith = 1;
 				auto sibling = element.previousSibling;
 				while (sibling) {
@@ -1456,7 +1456,7 @@ private struct Rule {
 					return false;
 				break;
 
-			case hashOf("nth-last-of-type"):
+			case quickHashOf("nth-last-of-type"):
 				auto ith = 1;
 				auto sibling = element.nextSibling;
 				while (sibling) {
@@ -1470,7 +1470,7 @@ private struct Rule {
 					return false;
 				break;
 
-			case hashOf("only-of-type"):
+			case quickHashOf("only-of-type"):
 				auto sibling = element.previousSibling;
 				while (sibling) {
 					if (sibling.isElementNode && sibling.tag.equalsCI(element.tag))
@@ -1485,7 +1485,7 @@ private struct Rule {
 				}
 				break;
 
-			case hashOf("only-child"):
+			case quickHashOf("only-child"):
 				auto parent = element.parent_;
 				if (!parent)
 					return false;

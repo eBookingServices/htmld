@@ -1578,6 +1578,10 @@ struct Selector {
 				} else if (*ptr == '*') {
 					rule.flags_ |= Rule.Flags.HasAny;
 					state = PostIdentifier;
+				} else if (*ptr == ':') {
+					rule.flags_ |= Rule.Flags.HasAny;
+					state = PostIdentifier;
+					continue;
 				}
 				break;
 
@@ -1772,7 +1776,7 @@ struct Selector {
 				if (ptr == end)
 					continue;
 
-				rule.pseudo_ = hashOf(start[0..ptr-start]);
+				rule.pseudo_ = quickHashOf(start[0..ptr-start]);
 				rule.flags_ |= Rule.Flags.HasPseudo;
 				if (*ptr != '(') {
 					state = PostIdentifier;

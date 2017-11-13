@@ -64,13 +64,11 @@ auto getEntityUTF8(const(char)[] name) {
 }
 
 package auto decodeCodePoint(int code) {
-	static char[4] buf;
+	import std.range;
 
-	if (isValidDchar(cast(dchar)code)) {
-		return toUTF8(buf, cast(dchar)code);
-	} else {
-		return toUTF8(buf, cast(dchar)0xfffd);
-	}
+	static char[4] buf;
+	dchar[1] input = [code];
+	return buf[0 .. $ - input[ ].byChar().copy(buf[ ].byChar()).length];
 }
 
 shared static this() {

@@ -402,7 +402,9 @@ struct Node {
 		next_ = node;
 		node.prev_ = &this;
 
-		if (parent_ && (parent_.firstChild_ == node))
+		if (prev_)
+			prev_.next_ = &this;
+		else if (parent_)
 			parent_.firstChild_ = &this;
 	}
 
@@ -413,6 +415,11 @@ struct Node {
 		prev_ = node;
 		next_ = node.next_;
 		node.next_ = &this;
+
+		if (next_)
+			next_.prev_ = &this;
+		else if (parent_)
+			parent_.lastChild_ = &this;
 	}
 
 	void detach() {

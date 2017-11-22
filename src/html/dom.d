@@ -24,7 +24,7 @@ enum DOMCreateOptions {
 }
 
 
-enum OnlyElements = "(a) => { return a.isElementNode; }";
+alias onlyElements = a => a.isElementNode;
 
 
 package NodeWrapper!T wrap(T)(T* node) {
@@ -403,7 +403,9 @@ struct Node {
 		next_ = node;
 		node.prev_ = &this;
 
-		if (parent_ && (parent_.firstChild_ == node))
+		if (prev_)
+			prev_.next_ = &this;
+		else if (parent_)
 			parent_.firstChild_ = &this;
 	}
 
@@ -414,6 +416,11 @@ struct Node {
 		prev_ = node;
 		next_ = node.next_;
 		node.next_ = &this;
+
+		if (next_)
+			next_.prev_ = &this;
+		else if (parent_)
+			parent_.lastChild_ = &this;
 	}
 
 	void detach() {
@@ -533,7 +540,7 @@ struct Node {
 			app.put("-->");
 			break;
 		case CDATA:
-			app.put("<[CDATA[");
+			app.put("<![CDATA[");
 			app.put(tag_);
 			app.put("]]>");
 			break;
@@ -581,7 +588,7 @@ struct Node {
 			app.put("-->");
 			break;
 		case CDATA:
-			app.put("<[CDATA[");
+			app.put("<![CDATA[");
 			app.put(tag_);
 			app.put("]]>");
 			break;
@@ -883,6 +890,12 @@ unittest {
 	assert(doc.root.find("body").front.closest("html").outerHTML == "<html><body><div>\&nbsp;</div></body></html>");
 }
 
+unittest {
+	const doc = createDocument(`<html><body><![CDATA[test]]></body></html>`);
+	assert(doc.root.firstChild.firstChild.firstChild.isCDATANode);
+	assert(doc.root.html == `<html><body><![CDATA[test]]></body></html>`);
+}
+
 
 
 static auto createDocument() {
@@ -984,11 +997,11 @@ struct Document {
 	}
 
 	@property auto elements() const {
-		return DescendantsDFForward!(const(Node), mixin(OnlyElements))(root_);
+		return DescendantsDFForward!(const(Node), onlyElements)(root_);
 	}
 
 	@property auto elements() {
-		return DescendantsDFForward!(Node, mixin(OnlyElements))(root_);
+		return DescendantsDFForward!(Node, onlyElements)(root_);
 	}
 
 	@property auto elementsByTagName(HTMLString tag) const {
@@ -1012,7 +1025,7 @@ struct Document {
 	NodeWrapper!(const(Node)) querySelector(Selector selector, const(Node)* context = null) const {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(const(Node), mixin(OnlyElements))(top)) {
+		foreach(node; DescendantsDFForward!(const(Node), onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
@@ -1022,7 +1035,7 @@ struct Document {
 	NodeWrapper!Node querySelector(Selector selector, Node* context = null) {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(Node, mixin(OnlyElements))(top)) {
+		foreach(node; DescendantsDFForward!(Node, onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}

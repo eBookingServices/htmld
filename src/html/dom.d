@@ -23,7 +23,7 @@ enum DOMCreateOptions {
 }
 
 
-enum OnlyElements = "(a) => { return a.isElementNode; }";
+alias onlyElements = a => a.isElementNode;
 
 
 package NodeWrapper!T wrap(T)(T* node) {
@@ -875,6 +875,8 @@ unittest {
 	assert(doc.root.find("body").front.outerHTML == `<body><div>&#160;</div></body>`);
 	assert(doc.root.find("body").front.closest("body").outerHTML == `<body><div>&#160;</div></body>`); // closest() tests self
 	assert(doc.root.find("body").front.closest("html").outerHTML == `<html><body><div>&#160;</div></body></html>`);
+	assert(!doc.nodes.all!q{a.isElementNode});
+	assert(doc.elements.all!q{a.isElementNode});
 }
 
 
@@ -978,11 +980,11 @@ struct Document {
 	}
 
 	@property auto elements() const {
-		return DescendantsDFForward!(const(Node), mixin(OnlyElements))(root_);
+		return DescendantsDFForward!(const(Node), onlyElements)(root_);
 	}
 
 	@property auto elements() {
-		return DescendantsDFForward!(Node, mixin(OnlyElements))(root_);
+		return DescendantsDFForward!(Node, onlyElements)(root_);
 	}
 
 	@property auto elementsByTagName(HTMLString tag) const {
@@ -1006,7 +1008,7 @@ struct Document {
 	NodeWrapper!(const(Node)) querySelector(Selector selector, const(Node)* context = null) const {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(const(Node), mixin(OnlyElements))(top)) {
+		foreach(node; DescendantsDFForward!(const(Node), onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
@@ -1016,7 +1018,7 @@ struct Document {
 	NodeWrapper!Node querySelector(Selector selector, Node* context = null) {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(Node, mixin(OnlyElements))(top)) {
+		foreach(node; DescendantsDFForward!(Node, onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}

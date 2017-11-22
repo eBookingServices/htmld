@@ -5,8 +5,9 @@ import std.algorithm;
 import std.array;
 import std.ascii;
 import std.conv;
-import std.string;
 import std.range;
+import std.string;
+import std.typecons;
 
 import html.parser;
 import html.alloc;
@@ -500,7 +501,7 @@ struct Node {
 
 				if (value.length) {
 					app.put("=\"");
-					writeHTMLEscaped(app, value);
+					writeHTMLEscaped!(Yes.escapeQuotes)(app, value);
 					app.put("\"");
 				}
 			}
@@ -524,7 +525,7 @@ struct Node {
 			}
 			break;
 		case Text:
-			writeHTMLEscaped(app, tag_);
+			writeHTMLEscaped!(No.escapeQuotes)(app, tag_);
 			break;
 		case Comment:
 			app.put("<!--");
@@ -561,7 +562,7 @@ struct Node {
 
 				if (value.length) {
 					app.put("=\"");
-					writeHTMLEscaped(app, value);
+					writeHTMLEscaped!(Yes.escapeQuotes)(app, value);
 					app.put("\"");
 				}
 			}
@@ -572,7 +573,7 @@ struct Node {
 			}
 			break;
 		case Text:
-			writeHTMLEscaped(app, tag_);
+			writeHTMLEscaped!(No.escapeQuotes)(app, tag_);
 			break;
 		case Comment:
 			app.put("<!--");
@@ -831,13 +832,18 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 
 unittest {
 	auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
-	assert(doc.root.outerHTML == `<root><html><body>&#160;</body></html></root>`);
+	assert(doc.root.outerHTML == "<root><html><body>\&nbsp;</body></html></root>");
 	doc = createDocument!(DOMCreateOptions.None)(`<html><body>&nbsp;</body></html>`);
 	assert(doc.root.outerHTML == `<root><html><body>&amp;nbsp;</body></html></root>`);
 	doc = createDocument(`<script>&nbsp;</script>`);
 	assert(doc.root.outerHTML == `<root><script>&nbsp;</script></root>`, doc.root.outerHTML);
 	doc = createDocument(`<style>&nbsp;</style>`);
 	assert(doc.root.outerHTML == `<root><style>&nbsp;</style></root>`, doc.root.outerHTML);
+}
+
+unittest {
+	const doc = createDocument(`<html><body><div title='"Тест&apos;"'>"К"ириллица</div></body></html>`);
+	assert(doc.root.html == `<html><body><div title="&#34;Тест'&#34;">"К"ириллица</div></body></html>`);
 }
 
 unittest {
@@ -870,11 +876,11 @@ unittest {
 
 unittest {
 	const doc = createDocument(`<html><body><div>&nbsp;</div></body></html>`);
-	assert(doc.root.find("html").front.outerHTML == `<html><body><div>&#160;</div></body></html>`);
-	assert(doc.root.find("html").front.find("div").front.outerHTML == `<div>&#160;</div>`);
-	assert(doc.root.find("body").front.outerHTML == `<body><div>&#160;</div></body>`);
-	assert(doc.root.find("body").front.closest("body").outerHTML == `<body><div>&#160;</div></body>`); // closest() tests self
-	assert(doc.root.find("body").front.closest("html").outerHTML == `<html><body><div>&#160;</div></body></html>`);
+	assert(doc.root.find("html").front.outerHTML == "<html><body><div>\&nbsp;</div></body></html>");
+	assert(doc.root.find("html").front.find("div").front.outerHTML == "<div>\&nbsp;</div>");
+	assert(doc.root.find("body").front.outerHTML == "<body><div>\&nbsp;</div></body>");
+	assert(doc.root.find("body").front.closest("body").outerHTML == "<body><div>\&nbsp;</div></body>"); // closest() tests self
+	assert(doc.root.find("body").front.closest("html").outerHTML == "<html><body><div>\&nbsp;</div></body></html>");
 }
 
 

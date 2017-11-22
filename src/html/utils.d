@@ -2,8 +2,7 @@ module html.utils;
 
 
 import std.ascii;
-import std.format;
-import std.utf;
+import std.typecons;
 
 
 package bool isSpace(Char)(Char ch) {
@@ -39,26 +38,15 @@ package size_t tagHashOf(const(char)[] x) {
 }
 
 
-void writeHTMLEscaped(Appender)(ref Appender app, const(char)[] x) {
-	foreach (ch; x.byDchar) {
+void writeHTMLEscaped(Flag!q{escapeQuotes} escapeQuotes, Appender)(ref Appender app, const(char)[] x) {
+	foreach (dchar ch; x) {
 		switch (ch) {
-			case '"':
-				app.put("&quot;");
-				break;
-			case '\'':
-				app.put("&#39;");
-				break;
-			case 'a': .. case 'z':
-				goto case;
-			case 'A': .. case 'Z':
-				goto case;
-			case '0': .. case '9':
-				goto case;
-			case ' ', '\t', '\n', '\r', '-', '_', '.', ':', ',', ';',
-				'#', '+', '*', '?', '=', '(', ')', '/', '!',
-				'%' , '{', '}', '[', ']', '$', '^', '~':
-				app.put(cast(char)ch);
-				break;
+			static if (escapeQuotes) {
+				case '"':
+					app.put("&#34;"); // shorter than &quot;
+					static assert('"' == 34);
+					break;
+			}
 			case '<':
 				app.put("&lt;");
 				break;
@@ -69,7 +57,7 @@ void writeHTMLEscaped(Appender)(ref Appender app, const(char)[] x) {
 				app.put("&amp;");
 				break;
 			default:
-				formattedWrite(&app, "&#%d;", cast(uint)ch);
+				app.put(ch);
 				break;
 		}
 	}

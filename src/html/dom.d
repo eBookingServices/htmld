@@ -532,7 +532,7 @@ struct Node {
 			app.put("-->");
 			break;
 		case CDATA:
-			app.put("<[CDATA[");
+			app.put("<![CDATA[");
 			app.put(tag_);
 			app.put("]]>");
 			break;
@@ -580,7 +580,7 @@ struct Node {
 			app.put("-->");
 			break;
 		case CDATA:
-			app.put("<[CDATA[");
+			app.put("<![CDATA[");
 			app.put(tag_);
 			app.put("]]>");
 			break;
@@ -875,6 +875,12 @@ unittest {
 	assert(doc.root.find("body").front.outerHTML == `<body><div>&#160;</div></body>`);
 	assert(doc.root.find("body").front.closest("body").outerHTML == `<body><div>&#160;</div></body>`); // closest() tests self
 	assert(doc.root.find("body").front.closest("html").outerHTML == `<html><body><div>&#160;</div></body></html>`);
+}
+
+unittest {
+	const doc = createDocument(`<html><body><![CDATA[test]]></body></html>`);
+	assert(doc.root.firstChild.firstChild.firstChild.isCDATANode);
+	assert(doc.root.html == `<html><body><![CDATA[test]]></body></html>`);
 }
 
 

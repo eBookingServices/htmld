@@ -5,12 +5,12 @@ import std.algorithm;
 import std.array;
 import std.ascii;
 import std.conv;
+import std.experimental.allocator;
 import std.range;
 import std.string;
 import std.typecons;
 
 import html.parser;
-import html.alloc;
 import html.utils;
 
 
@@ -97,11 +97,10 @@ private struct AncestorsForward(NodeType, alias Condition = null) {
 }
 
 
-// depth first traversal
-private struct DescendantsDFForward(NodeType, alias Condition = null) {
+private struct DescendantsForward(NodeType, alias Condition = null) {
 	this(NodeType* first) {
 		curr_ = first;
-		top_ = (first && first.parent_) ? first.parent_ : null;
+		top_ = first;
 		static if (!is(typeof(Condition) == typeof(null))) {
 			if (!Condition(first))
 				popFront;
@@ -120,22 +119,30 @@ private struct DescendantsDFForward(NodeType, alias Condition = null) {
 		while (curr_) {
 			if (curr_.firstChild_) {
 				curr_ = curr_.firstChild_;
-			} else {
+			} else if (curr_ != top_) {
 				NodeType* next = curr_.next_;
 				if (!next) {
 					NodeType* parent = curr_.parent_;
-					while (parent && (top_ != parent)) {
-						if (parent.next_)
+					while (parent) {
+						if (parent != top_) {
+							if (parent.next_) {
+								next = parent.next_;
+								break;
+							}
+							parent = parent.parent_;
+						} else {
+							next = null;
 							break;
-						parent = parent.parent_;
+						}
 					}
-					if (parent)
-						next = parent.next_;
 				}
 
 				curr_ = next;
 				if (!curr_)
 					break;
+			} else {
+				curr_ = null;
+				break;
 			}
 
 			static if (is(typeof(Condition) == typeof(null))) {
@@ -149,6 +156,20 @@ private struct DescendantsDFForward(NodeType, alias Condition = null) {
 
 	private NodeType* curr_;
 	private NodeType* top_;
+}
+
+
+unittest {
+	const doc = createDocument(`<div id=a><div id=b></div><div id=c><div id=e></div><div id=f><div id=h></div></div><div id=g></div></div><div id=d></div></div>`);
+	assert(DescendantsForward!(const(Node))(doc.root).count() == 9);
+	auto fs = DescendantsForward!(const(Node), x => x.attr("id") == "f")(doc.root);
+	assert(fs.count() == 1);
+	assert(fs.front().attr("id") == "f");
+	auto hs = DescendantsForward!(const(Node), x => x.attr("id") == "h")(fs.front());
+	assert(hs.count() == 1);
+	assert(hs.front().attr("id") == "h");
+	auto divs = DescendantsForward!(const(Node))(fs.front());
+	assert(divs.count() == 2);
 }
 
 
@@ -227,10 +248,8 @@ enum NodeTypes : ubyte {
 
 
 struct Node {
-	package this(Document* document, HTMLString tag) {
-		tag_ = tag;
-		document_ = document;
-	}
+	@disable this();
+	@disable this(this);
 
 	@property auto type() const {
 		return (flags_ & TypeMask) >> TypeShift;
@@ -238,6 +257,22 @@ struct Node {
 
 	@property auto tag() const {
 		return isElementNode ? tag_ : null;
+	}
+
+	@property auto comment() const {
+		return isCommentNode ? tag_ : null;
+	}
+
+	@property auto cdata() const {
+		return isCDATANode ? tag_ : null;
+	}
+
+	@property auto declaration() const {
+		return isDeclarationNode ? tag_ : null;
+	}
+
+	@property auto processingInstruction() const {
+		return isProcessingInstructionNode ? tag_ : null;
 	}
 
 	void text(Appender)(ref Appender app) const {
@@ -253,9 +288,13 @@ struct Node {
 	}
 
 	@property auto text() {
-		Appender!HTMLString app;
-		text(app);
-		return app.data;
+		if (isTextNode) {
+			return tag_;
+		} else {
+			Appender!HTMLString app;
+			text(app);
+			return app.data;
+		}
 	}
 
 	@property void text(HTMLString text) {
@@ -724,11 +763,11 @@ struct Node {
 	}
 
 	@property auto descendants() const {
-		return DescendantsDFForward!(const(Node))(firstChild_);
+		return DescendantsForward!(const(Node))(firstChild_);
 	}
 
 	@property auto descendants() {
-		return DescendantsDFForward!Node(firstChild_);
+		return DescendantsForward!Node(firstChild_);
 	}
 
 	@property isSelfClosing() const {
@@ -782,10 +821,8 @@ struct Node {
 		return type == NodeTypes.ProcessingInstruction;
 	}
 
-	package Node* clone(Document* document) const {
-		auto node = document.alloc.alloc();
-		*node = Node(document, tag_);
-		node.flags_ = flags_;
+	Node* clone(Document* document) const {
+		auto node = document.allocNode(tag_, flags_);
 
 		foreach (HTMLString attr, HTMLString value; attrs_)
 			node.attrs_[attr] = value;
@@ -801,12 +838,12 @@ struct Node {
 	}
 
 	Node* clone() {
-		return document_.clone(&this);
+		return document_.cloneNode(&this);
 	}
 
 package:
-	enum TypeMask	= 0x7;
-	enum TypeShift	= 0;
+	enum TypeMask	= 0x7UL;
+	enum TypeShift	= 0UL;
 	enum FlagsBit	= TypeMask + 1;
 	enum Flags {
 		SelfClosing = FlagsBit << 1,
@@ -827,10 +864,10 @@ package:
 	Document* document_;
 }
 
-auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source) {
+auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source, IAllocator alloc = theAllocator) {
 	enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
 
-	auto document = createDocument();
+	auto document = createDocument(alloc);
 	auto builder = DOMBuilder!(Document)(document);
 
 	parseHTML!(typeof(builder), parserOptions)(source, builder);
@@ -897,82 +934,74 @@ unittest {
 }
 
 
-
-static auto createDocument() {
-	auto document = Document();
-	document.init();
+static auto createDocument(IAllocator alloc = theAllocator) {
+	auto document = Document(alloc);
 	document.root(document.createElement("root"));
 	return document;
 }
 
 
 struct Document {
+	private this(IAllocator alloc) {
+		alloc_ = alloc;
+	}
+
+	@disable this(this);
+
+	bool opCast() const {
+		return root_ !is null;
+	}
+
 	auto createElement(HTMLString tagName, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, tagName);
-		node.flags_ |= (NodeTypes.Element << Node.TypeShift);
+		auto node = allocNode(tagName, NodeTypes.Element << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
 	auto createTextNode(HTMLString text, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, text);
-		node.flags_ |= (NodeTypes.Text << Node.TypeShift);
+		auto node = allocNode(text, NodeTypes.Text << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
 	auto createCommentNode(HTMLString comment, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, comment);
-		node.flags_ |= (NodeTypes.Comment << Node.TypeShift);
+		auto node = allocNode(comment, NodeTypes.Comment << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
 	auto createCDATANode(HTMLString cdata, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, cdata);
-		node.flags_ |= (NodeTypes.CDATA << Node.TypeShift);
+		auto node = allocNode(cdata, NodeTypes.CDATA << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
 	auto createDeclarationNode(HTMLString data, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, data);
-		node.flags_ |= (NodeTypes.Declaration << Node.TypeShift);
+		auto node = allocNode(data, NodeTypes.Declaration << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
 	auto createProcessingInstructionNode(HTMLString data, Node* parent = null) {
-		auto node = alloc_.alloc();
-		*node = Node(&this, data);
-		node.flags_ |= (NodeTypes.ProcessingInstruction << Node.TypeShift);
+		auto node = allocNode(data, NodeTypes.ProcessingInstruction << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
 		return wrap(node);
 	}
 
-	void destroyNode(Node* node) {
-		alloc_.free(node);
+	Node* cloneNode(const(Node)* other) {
+		return other.clone(&this);
 	}
 
-	Node* clone(const(Node)* source) {
-		return source.clone(&this);
-	}
-
-	Document clone() const {
+	Document clone(IAllocator alloc = theAllocator) const {
 		Document other = Document();
-		other.init();
-		other.root(other.clone(this.root_));
+		other.alloc_ = alloc;
+		other.root(other.cloneNode(this.root_));
 		return other;
 	}
 
@@ -984,32 +1013,34 @@ struct Document {
 		return wrap(root_);
 	}
 
-	@property auto root(Node* root) {
+	@property void root(Node* root) {
+		if (root.document_.alloc_ != alloc_)
+			alloc_ = root.document_.alloc_;
 		root_ = root;
 	}
 
 	@property auto nodes() const {
-		return DescendantsDFForward!(const(Node))(root_);
+		return DescendantsForward!(const(Node))(root_);
 	}
 
 	@property auto nodes() {
-		return DescendantsDFForward!Node(root_);
+		return DescendantsForward!Node(root_);
 	}
 
 	@property auto elements() const {
-		return DescendantsDFForward!(const(Node), onlyElements)(root_);
+		return DescendantsForward!(const(Node), onlyElements)(root_);
 	}
 
 	@property auto elements() {
-		return DescendantsDFForward!(Node, onlyElements)(root_);
+		return DescendantsForward!(Node, onlyElements)(root_);
 	}
 
 	@property auto elementsByTagName(HTMLString tag) const {
-		return DescendantsDFForward!(const(Node), (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
+		return DescendantsForward!(const(Node), (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
 	}
 
 	@property auto elementsByTagName(HTMLString tag) {
-		return DescendantsDFForward!(Node, (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
+		return DescendantsForward!(Node, (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
 	}
 
 	NodeWrapper!(const(Node)) querySelector(HTMLString selector, Node* context = null) const {
@@ -1025,7 +1056,7 @@ struct Document {
 	NodeWrapper!(const(Node)) querySelector(Selector selector, const(Node)* context = null) const {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(const(Node), onlyElements)(top)) {
+		foreach(node; DescendantsForward!(const(Node), onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
@@ -1035,15 +1066,15 @@ struct Document {
 	NodeWrapper!Node querySelector(Selector selector, Node* context = null) {
 		auto top = context ? context : root_;
 
-		foreach(node; DescendantsDFForward!(Node, onlyElements)(top)) {
+		foreach(node; DescendantsForward!(Node, onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
 		return NodeWrapper!Node(null);
 	}
 
-	alias QuerySelectorAllResult = QuerySelectorMatcher!(Node, DescendantsDFForward!Node);
-	alias QuerySelectorAllConstResult = QuerySelectorMatcher!(const(Node), DescendantsDFForward!(const(Node)));
+	alias QuerySelectorAllResult = QuerySelectorMatcher!(Node, DescendantsForward!Node);
+	alias QuerySelectorAllConstResult = QuerySelectorMatcher!(const(Node), DescendantsForward!(const(Node)));
 
 	QuerySelectorAllResult querySelectorAll(HTMLString selector, Node* context = null) {
 		auto rules = Selector.parse(selector);
@@ -1057,12 +1088,12 @@ struct Document {
 
 	QuerySelectorAllConstResult querySelectorAll(Selector selector, const(Node)* context = null) const {
 		auto top = context ? context : root_;
-		return QuerySelectorMatcher!(const(Node), DescendantsDFForward!(const(Node)))(selector, DescendantsDFForward!(const(Node))(top));
+		return QuerySelectorMatcher!(const(Node), DescendantsForward!(const(Node)))(selector, DescendantsForward!(const(Node))(top));
 	}
 
 	QuerySelectorAllResult querySelectorAll(Selector selector, Node* context = null) {
 		auto top = context ? context : root_;
-		return QuerySelectorMatcher!(Node, DescendantsDFForward!Node)(selector, DescendantsDFForward!Node(top));
+		return QuerySelectorMatcher!(Node, DescendantsForward!Node)(selector, DescendantsForward!Node(top));
 	}
 
 	void toString(Appender)(ref Appender app) const {
@@ -1075,17 +1106,34 @@ struct Document {
 		return app.data;
 	}
 
-	package ref auto alloc() {
-		return alloc_;
+	auto allocNode()(HTMLString tag, size_t flags) {
+		auto ptr = cast(Node*)alloc_.allocate(max(stateSize!Node, 1)).ptr;
+		if (ptr) {
+			ptr.flags_ = flags;
+			ptr.tag_ = tag;
+			ptr.attrs_ = null;
+
+			ptr.parent_ = null;
+			ptr.firstChild_ = null;
+			ptr.lastChild_ = null;
+
+			ptr.prev_ = null;
+			ptr.next_ = null;
+
+			ptr.document_ = &this;
+		}
+
+		return ptr;
+	}
+
+	void destroyNode(Node* node) {
+		assert(node.firstChild_ is null);
+		alloc_.deallocate((cast(void*)node)[0..Node.sizeof]);
 	}
 
 private:
-	void init() {
-		alloc_.init;
-	}
-
 	Node* root_;
-	PageAllocator!(Node, 1024) alloc_;
+	IAllocator alloc_;
 }
 
 
@@ -1097,7 +1145,7 @@ unittest {
 	assert(doc.root.html == src, doc.root.html);
 
 	// basic cloning
-	auto cloned = doc.clone(doc.root);
+	auto cloned = doc.cloneNode(doc.root);
 	assert(cloned.html == src, cloned.html);
 	assert(doc.root.html == src, cloned.html);
 

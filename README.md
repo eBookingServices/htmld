@@ -4,6 +4,7 @@ Lightweight and forgiving HTML parser and DOM.
 The parser was inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
 
 HTML Entity parsing and decoding are both optional. The current parser interface is based on callbacks.
+It can also output compact HTML.
 
 
 Creating the DOM from source:
@@ -24,6 +25,13 @@ container.html = "<p>moo!</p>";
 
 auto app = appender!string;
 doc.root.outerHTML(app);
+```
+
+
+Compacting HTML:
+```d
+auto doc = createDocument!(DOMCreateOptions.none)("<html>\n<body attr="a" attr="a b c">    abc    </body>\n</html>");
+writeln(doc.root.compactHTML);
 ```
 
 
@@ -65,10 +73,10 @@ struct DOMBuilder {
     void onNamedEntity(const(char)[] data) {}
     void onNumericEntity(const(char)[] data) {}
     void onHexEntity(const(char)[] data) {}
-    
+
     // required only if DecodeEntities is set
     void onEntity(const(char)[] data, const(char)[] decoded) {}
-    
+
     void onDocumentEnd() {}
 }
 ```
@@ -76,3 +84,4 @@ struct DOMBuilder {
 
 # todo
 - implement range-based interface for parser
+- implement a basic validation mode

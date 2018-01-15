@@ -228,7 +228,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 		case PreTagName:
 			if (*ptr == '/') {
 				state = PreClosingTagName;
-			} else if ((*ptr == '>') || isSpace(*ptr) || (textState != ParserTextStates.Normal)) {
+			} else if ((*ptr == '>') || isWhite(*ptr) || (textState != ParserTextStates.Normal)) {
 				state = Text;
 			} else {
 				switch (*ptr) {
@@ -268,7 +268,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case TagName:
-			while ((ptr != end) && (*ptr != '/') && (*ptr != '>') && !isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '/') && (*ptr != '>') && !isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -278,7 +278,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			continue;
 
 		case PreClosingTagName:
-			while ((ptr != end) && isSpace(*ptr))
+			while ((ptr != end) && isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -310,7 +310,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case ClosingTagName:
-			while ((ptr != end) && (*ptr != '>') && !isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '>') && !isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -330,7 +330,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case SelfClosingTag:
-			while ((ptr != end) && (*ptr != '>') && isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '>') && isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -346,7 +346,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case PreAttrName:
-			while ((ptr != end) && (*ptr != '>') && (*ptr != '/') && isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '>') && (*ptr != '/') && isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -364,7 +364,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case AttrName:
-			while ((ptr != end) && (*ptr != '=') && (*ptr != '>') && (*ptr != '/') && !isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '=') && (*ptr != '>') && (*ptr != '/') && !isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -375,7 +375,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			continue;
 
 		case PostAttrName:
-			while ((ptr != end) && (*ptr != '=') && (*ptr != '>') && (*ptr != '/') && isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '=') && (*ptr != '>') && (*ptr != '/') && isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -398,7 +398,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case PreAttrValue:
-			while ((ptr != end) && (*ptr != '\"') && (*ptr != '\'') && isSpace(*ptr))
+			while ((ptr != end) && (*ptr != '\"') && (*ptr != '\'') && isWhite(*ptr))
 				++ptr;
 			if (ptr == end)
 				continue;
@@ -485,10 +485,10 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 
 		case AttrValueNQ:
 			static if (ParseEntities) {
-				while ((ptr != end) && (*ptr != '>') && (*ptr != '&') && !isSpace(*ptr))
+				while ((ptr != end) && (*ptr != '>') && (*ptr != '&') && !isWhite(*ptr))
 					++ptr;
 			} else {
-				while ((ptr != end) && (*ptr != '>') && !isSpace(*ptr))
+				while ((ptr != end) && (*ptr != '>') && !isWhite(*ptr))
 					++ptr;
 			}
 			if (ptr == end)
@@ -784,7 +784,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case PreScript_SCRIPT:
-			if ((*ptr == '/') || (*ptr == '>') || isSpace(*ptr))
+			if ((*ptr == '/') || (*ptr == '>') || isWhite(*ptr))
 				textState = ParserTextStates.Script;
 
 			state = TagName;
@@ -818,7 +818,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case PreStyle_STYLE:
-			if ((*ptr == '/') || (*ptr == '>') || isSpace(*ptr))
+			if ((*ptr == '/') || (*ptr == '>') || isWhite(*ptr))
 				textState = ParserTextStates.Style;
 
 			state = TagName;
@@ -861,7 +861,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case ClosingScript_SCRIPT:
-			if ((*ptr == '>') || isSpace(*ptr)) {
+			if ((*ptr == '>') || isWhite(*ptr)) {
 				textState = ParserTextStates.Normal;
 				state = ClosingTagName;
 				start += 2;
@@ -899,7 +899,7 @@ void parseHTML(Handler, size_t options = ParserOptions.Default)(const(char)[] so
 			break;
 
 		case ClosingStyle_STYLE:
-			if ((*ptr == '>') || isSpace(*ptr)) {
+			if ((*ptr == '>') || isWhite(*ptr)) {
 				textState = ParserTextStates.Normal;
 				state = ClosingTagName;
 				start += 2;

@@ -343,9 +343,21 @@ struct Node {
 		return app.data;
 	}
 
+	@property auto compactHTML() const {
+		Appender!HTMLString app;
+		compactInnerHTML(app);
+		return app.data;
+	}
+
 	@property auto outerHTML() const {
 		Appender!HTMLString app;
 		outerHTML!(typeof(app))(app);
+		return app.data;
+	}
+
+	@property auto compactOuterHTML() const {
+		Appender!HTMLString app;
+		compactOuterHTML!(typeof(app))(app);
 		return app.data;
 	}
 
@@ -535,6 +547,14 @@ struct Node {
 		}
 	}
 
+	void compactInnerHTML(Appender)(ref Appender app) const {
+		const(Node)* child = firstChild_;
+		while (child) {
+			child.compactOuterHTML(app);
+			child = child.next_;
+		}
+	}
+
 	void outerHTML(Appender)(ref Appender app) const {
 		final switch (type) with (NodeTypes) {
 		case Element:
@@ -546,9 +566,14 @@ struct Node {
 				app.put(attr);
 
 				if (value.length) {
-					app.put("=\"");
-					writeHTMLEscaped!(Yes.escapeQuotes)(app, value);
-					app.put("\"");
+					if (value.requiresQuotes) {
+						app.put("=\"");
+						app.writeQuotesEscaped(value);
+						app.put("\"");
+					} else {
+						app.put('=');
+						app.put(value);
+					}
 				}
 			}
 
@@ -558,8 +583,10 @@ struct Node {
 				app.put('>');
 				switch (tagHashOf(tag_))
 				{
-				case tagHashOf("script"), tagHashOf("style"):
-					text(app);
+				case tagHashOf("script"):
+				case tagHashOf("style"):
+					if (firstChild_)
+						app.put(firstChild_.tag_);
 					break;
 				default:
 					innerHTML(app);
@@ -571,12 +598,151 @@ struct Node {
 			}
 			break;
 		case Text:
-			writeHTMLEscaped!(No.escapeQuotes)(app, tag_);
+			app.put(tag_);
 			break;
 		case Comment:
 			app.put("<!--");
 			app.put(tag_);
 			app.put("-->");
+			break;
+		case CDATA:
+			app.put("<![CDATA[");
+			app.put(tag_);
+			app.put("]]>");
+			break;
+		case Declaration:
+			app.put("<!");
+			app.put(tag_);
+			app.put(">");
+			break;
+		case ProcessingInstruction:
+			app.put("<?");
+			app.put(tag_);
+			app.put(">");
+			break;
+		}
+	}
+
+	void compactOuterHTML(Appender)(ref Appender app) const {
+		final switch (type) with (NodeTypes) {
+		case Element:
+			app.put('<');
+			app.put(tag_);
+
+			foreach (HTMLString attr, HTMLString value; attrs_) {
+				app.put(' ');
+				app.put(attr);
+
+				if (value.length) {
+					if (value.requiresQuotes) {
+						app.put("=\"");
+						app.writeQuotesEscaped(value);
+						app.put("\"");
+					} else {
+						app.put('=');
+						app.put(value);
+					}
+				}
+			}
+
+			if (isVoidElement) {
+				app.put(">");
+			} else {
+				app.put('>');
+				switch (tagHashOf(tag_)) {
+				case tagHashOf("script"):
+				case tagHashOf("style"):
+					if (firstChild_)
+						app.put(firstChild_.tag_.strip());
+					break;
+				default:
+					compactInnerHTML(app);
+					break;
+				}
+				app.put("</");
+				app.put(tag_);
+				app.put('>');
+			}
+			break;
+		case Text:
+			auto ptr = tag_.ptr;
+			const end = ptr + tag_.length;
+
+			if (tag_.isAllWhite()) {
+				size_t aroundCount;
+				const(Node)*[2] around;
+
+				around.ptr[aroundCount] = prev_;
+				if (!around.ptr[aroundCount])
+					around.ptr[aroundCount] = parent_;
+				if (around.ptr[aroundCount])
+					++aroundCount;
+				around.ptr[aroundCount] = next_;
+				if (!around.ptr[aroundCount])
+					around.ptr[aroundCount] = parent_;
+				if (around.ptr[aroundCount] && (!aroundCount || (around.ptr[aroundCount] != around.ptr[aroundCount - 1])))
+					++aroundCount;
+
+				auto tagsMatch = true;
+				Laround: foreach (i; 0..aroundCount) {
+					if (around.ptr[i].isElementNode) {
+						switch (tagHashOf(around.ptr[i].tag_)) {
+						case tagHashOf("html"):
+						case tagHashOf("head"):
+						case tagHashOf("title"):
+						case tagHashOf("meta"):
+						case tagHashOf("link"):
+						case tagHashOf("script"):
+						case tagHashOf("style"):
+						case tagHashOf("body"):
+						case tagHashOf("br"):
+						case tagHashOf("p"):
+						case tagHashOf("div"):
+						case tagHashOf("center"):
+						case tagHashOf("dl"):
+						case tagHashOf("form"):
+						case tagHashOf("hr"):
+						case tagHashOf("ol"):
+						case tagHashOf("ul"):
+						case tagHashOf("table"):
+						case tagHashOf("tbody"):
+						case tagHashOf("tr"):
+						case tagHashOf("td"):
+						case tagHashOf("th"):
+						case tagHashOf("tfoot"):
+						case tagHashOf("thead"):
+							continue;
+						default:
+							tagsMatch = false;
+							break Laround;
+						}
+					}
+				}
+
+				if (!tagsMatch && (ptr != end))
+					app.put(*ptr);
+			} else {
+				auto space = false;
+				while (ptr != end) {
+					auto ch = *ptr++;
+					if (isWhite(ch)) {
+						if (space)
+							continue;
+						space = true;
+					} else {
+						space = false;
+					}
+					app.put(ch);
+				}
+			}
+			break;
+		case Comment:
+			auto stripped = tag_.strip();
+			if (!stripped.empty() && (tag_.front() == '[')) {
+				app.put("<!--");
+				app.put(tag_);
+				app.put("-->");
+			}
 			break;
 		case CDATA:
 			app.put("<![CDATA[");
@@ -875,10 +1041,17 @@ auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source
 }
 
 unittest {
+	auto doc = createDocument("<html> <body> \n\r\f\t </body> </html>");
+	assert(doc.root.compactOuterHTML == "<root><html><body></body></html></root>");
+	doc = createDocument("<html> <body> <div> <p>  <a>  </a> </p> </div> </body> </html>");
+	assert(doc.root.compactOuterHTML == "<root><html><body><div><p> <a> </a> </p></div></body></html></root>");
+}
+
+unittest {
 	auto doc = createDocument(`<html><body>&nbsp;</body></html>`);
 	assert(doc.root.outerHTML == "<root><html><body>\&nbsp;</body></html></root>");
 	doc = createDocument!(DOMCreateOptions.None)(`<html><body>&nbsp;</body></html>`);
-	assert(doc.root.outerHTML == `<root><html><body>&amp;nbsp;</body></html></root>`);
+	assert(doc.root.outerHTML == `<root><html><body>&nbsp;</body></html></root>`);
 	doc = createDocument(`<script>&nbsp;</script>`);
 	assert(doc.root.outerHTML == `<root><script>&nbsp;</script></root>`, doc.root.outerHTML);
 	doc = createDocument(`<style>&nbsp;</style>`);
@@ -1138,11 +1311,13 @@ private:
 
 
 unittest {
-	import std.stdio;
-
-	const(char)[] src = `<parent attr="value"><child></child>text</parent>`;
+	const(char)[] src = `<parent attr=value><child></child>text</parent>`;
 	auto doc = createDocument(src);
 	assert(doc.root.html == src, doc.root.html);
+
+	const(char)[] srcq = `<parent attr="v a l u e"><child></child>text</parent>`;
+	auto docq = createDocument(srcq);
+	assert(docq.root.html == srcq, docq.root.html);
 
 	// basic cloning
 	auto cloned = doc.cloneNode(doc.root);
@@ -1156,11 +1331,11 @@ unittest {
 	auto child = cloned.find("child").front.clone;
 	child.attr("attr", "test");
 	cloned.find("parent").front.appendChild(child);
-	assert(cloned.html == `<parent attr="value"><child></child>text<child attr="test"></child></parent>`, cloned.html);
+	assert(cloned.html == `<parent attr=value><child></child>text<child attr=test></child></parent>`, cloned.html);
 	assert(doc.root.html == src, doc.root.html);
 
 	child.text = "text";
-	assert(cloned.html == `<parent attr="value"><child></child>text<child attr="test">text</child></parent>`, cloned.html);
+	assert(cloned.html == `<parent attr=value><child></child>text<child attr=test>text</child></parent>`, cloned.html);
 	assert(doc.root.html == src, doc.root.html);
 
 	// document cloning
@@ -1216,14 +1391,17 @@ struct DOMBuilder(Document) {
 		}
 
 		if (element_) {
-			auto element = element_;
-
-			while (element) {
-				if (element.tag.equalsCI(data)) {
-					element_ = element_.parent_;
-					break;
+			if (element_.tag.equalsCI(data)) {
+				element_ = element_.parent_;
+			} else {
+				auto element = element_;
+				while (element) {
+					if (element.tag.equalsCI(data)) {
+						element_ = element.parent_;
+						break;
+					}
+					element = element.parent_;
 				}
-				element = element.parent_;
 			}
 		}
 	}
@@ -1378,9 +1556,9 @@ private struct Rule {
 					auto index = attr.indexOf(value_, start, cs ? CaseSensitive.yes : CaseSensitive.no);
 					if (index == -1)
 						return false;
-					if (index && !isSpace(attr[index - 1]))
+					if (index && !isWhite(attr[index - 1]))
 						return false;
-					if ((index + value_.length == attr.length) || isSpace(attr[index + value_.length]))
+					if ((index + value_.length == attr.length) || isWhite(attr[index + value_.length]))
 						break;
 					start = index + 1;
 				}
@@ -1740,7 +1918,7 @@ struct Selector {
 				continue;
 
 			case AttrOp:
-				while ((ptr != end) && (isSpace(*ptr)))
+				while ((ptr != end) && (isWhite(*ptr)))
 					++ptr;
 				if (ptr == end)
 					continue;
@@ -1786,7 +1964,7 @@ struct Selector {
 				break;
 
 			case PreAttrValue:
-				while ((ptr != end) && isSpace(*ptr))
+				while ((ptr != end) && isWhite(*ptr))
 					++ptr;
 				if (ptr == end)
 					continue;
@@ -1824,7 +2002,7 @@ struct Selector {
 				break;
 
 			case AttrValueNQ:
-				while ((ptr != end) && !isSpace(*ptr) && (*ptr != ']'))
+				while ((ptr != end) && !isWhite(*ptr) && (*ptr != ']'))
 					++ptr;
 				if (ptr == end)
 					continue;
@@ -1877,7 +2055,7 @@ struct Selector {
 				break;
 
 			case Relation:
-				while ((ptr != end) && isSpace(*ptr))
+				while ((ptr != end) && isWhite(*ptr))
 					++ptr;
 				if (ptr == end)
 					continue;

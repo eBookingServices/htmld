@@ -4,7 +4,7 @@ Lightweight and forgiving HTML parser and DOM.
 The parser was inspired by [htmlparse2](https://github.com/fb55/htmlparser2) by [fb55](https://github.com/fb55)
 
 HTML Entity parsing and decoding are both optional. The current parser interface is based on callbacks.
-It can also output compact HTML.
+It can also output compact HTML, and can do basic validation.
 
 
 Creating the DOM from source:

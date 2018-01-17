@@ -90,8 +90,8 @@ private enum ParserTextStates {
 
 
 enum ParserOptions {
-	ParseEntities   = 1 << 0,
-	DecodeEntities  = 1 << 1,
+	ParseEntities   	= 1 << 0,
+	DecodeEntities  	= 1 << 1,
 
 	None = 0,
 	Default = ParseEntities | DecodeEntities,

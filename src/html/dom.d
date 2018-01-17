@@ -18,10 +18,29 @@ alias HTMLString = const(char)[];
 
 enum DOMCreateOptions {
 	None = 0,
-	DecodeEntities  = 1 << 0,
+	DecodeEntities  		= 1 << 0,
+
+	ValidateClosed			= 1 << 10,
+	ValidateSelfClosing		= 1 << 11,
+	ValidateDuplicateAttr	= 1 << 12,
+	ValidateBasic			= ValidateClosed | ValidateSelfClosing | ValidateDuplicateAttr,
+	ValidateAll				= ValidateBasic,
 
 	Default = DecodeEntities,
 }
+
+
+enum ValidationError : size_t {
+	None,
+	MismatchingClose = 1,
+	MissingClose,
+	StrayClose,
+	SelfClosingNonVoidElement,
+	DuplicateAttr,
+}
+
+
+alias ValidationErrorCallable = void delegate(ValidationError, HTMLString, HTMLString);
 
 
 alias onlyElements = a => a.isElementNode;
@@ -326,14 +345,14 @@ struct Node {
 		attrs_.remove(name);
 	}
 
-	@property void html(size_t options = DOMCreateOptions.Default)(HTMLString html) {
+	@property void html(size_t Options = DOMCreateOptions.Default)(HTMLString html) {
 		assert(isElementNode, "cannot add html to non-element nodes");
 
-		enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
+		enum parserOptions = ((Options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
 
 		destroyChildren();
 
-		auto builder = DOMBuilder!(Document)(*document_, &this);
+		auto builder = DOMBuilder!(Document, Options)(*document_, &this);
 		parseHTML!(typeof(builder), parserOptions)(html, builder);
 	}
 
@@ -1030,15 +1049,30 @@ package:
 	Document* document_;
 }
 
-auto createDocument(size_t options = DOMCreateOptions.Default)(HTMLString source, IAllocator alloc = theAllocator) {
-	enum parserOptions = ((options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
+
+auto createDocument(size_t Options = DOMCreateOptions.Default)(HTMLString source, IAllocator alloc = theAllocator) {
+	enum parserOptions = ((Options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
+	static assert((Options & DOMCreateOptions.ValidateAll) == 0, "requested validation with no error callable");
 
 	auto document = createDocument(alloc);
-	auto builder = DOMBuilder!(Document)(document);
+	auto builder = DOMBuilder!(Document, Options)(document);
 
 	parseHTML!(typeof(builder), parserOptions)(source, builder);
 	return document;
 }
+
+
+auto createDocument(size_t Options = DOMCreateOptions.Default | DOMCreateOptions.ValidateAll)(HTMLString source, ValidationErrorCallable errorCallable, IAllocator alloc = theAllocator) {
+	enum parserOptions = ((Options & DOMCreateOptions.DecodeEntities) ? ParserOptions.DecodeEntities : 0);
+	static assert((Options & DOMCreateOptions.ValidateAll) != 0, "error callable but validation not requested");
+
+	auto document = createDocument(alloc);
+	auto builder = DOMBuilder!(Document, Options)(document, errorCallable);
+
+	parseHTML!(typeof(builder), parserOptions)(source, builder);
+	return document;
+}
+
 
 unittest {
 	auto doc = createDocument("<html> <body> \n\r\f\t </body> </html>");
@@ -1344,10 +1378,25 @@ unittest {
 }
 
 
-struct DOMBuilder(Document) {
-	this(ref Document document, Node* parent = null) {
-		document_ = &document;
-		element_ = parent ? parent : document.root;
+struct DOMBuilder(Document, size_t Options) {
+	enum {
+		Validate 				= (Options & DOMCreateOptions.ValidateAll) != 0,
+		ValidateClosed 			= (Options & DOMCreateOptions.ValidateClosed) != 0,
+		ValidateSelfClosing		= (Options & DOMCreateOptions.ValidateSelfClosing) != 0,
+		ValidateDuplicateAttr	= (Options & DOMCreateOptions.ValidateDuplicateAttr) != 0,
+	}
+
+	static if (Validate) {
+		this(ref Document document, ValidationErrorCallable errorCallable, Node* parent = null) {
+			document_ = &document;
+			element_ = parent ? parent : document.root;
+			error_ = errorCallable;
+		}
+	} else {
+		this(ref Document document, Node* parent = null) {
+			document_ = &document;
+			element_ = parent ? parent : document.root;
+		}
 	}
 
 	void onText(HTMLString data) {
@@ -1359,7 +1408,13 @@ struct DOMBuilder(Document) {
 	}
 
 	void onSelfClosing() {
-		element_.flags_ |= Node.Flags.SelfClosing;
+		if (element_.isVoidElement) {
+			element_.flags_ |= Node.Flags.SelfClosing;
+		} else {
+			static if (ValidateSelfClosing) {
+				error_(ValidationError.SelfClosingNonVoidElement, element_.tag_, null);
+			}
+		}
 		element_ = element_.parent_;
 	}
 
@@ -1369,8 +1424,7 @@ struct DOMBuilder(Document) {
 			text_.length = 0;
 		}
 
-		auto element = document_.createElement(data, element_);
-		element_ = element;
+		element_ = document_.createElement(data, element_);
 	}
 
 	void onOpenEnd(HTMLString data) {
@@ -1391,17 +1445,29 @@ struct DOMBuilder(Document) {
 		}
 
 		if (element_) {
+			assert(!element_.isTextNode);
 			if (element_.tag.equalsCI(data)) {
 				element_ = element_.parent_;
 			} else {
-				auto element = element_;
+				auto element = element_.parent_;
 				while (element) {
 					if (element.tag.equalsCI(data)) {
+						static if (ValidateClosed) {
+							error_(ValidationError.MismatchingClose, data, element_.tag);
+						}
 						element_ = element.parent_;
 						break;
 					}
 					element = element.parent_;
 				}
+				static if (ValidateClosed) {
+					if (!element)
+						error_(ValidationError.StrayClose, data, null);
+				}
+			}
+		} else {
+			static if (ValidateClosed) {
+				error_(ValidationError.StrayClose, data, null);
 			}
 		}
 	}
@@ -1412,8 +1478,13 @@ struct DOMBuilder(Document) {
 	}
 
 	void onAttrEnd() {
-		if (!attr_.empty)
+		if (!attr_.empty) {
+			static if (ValidateDuplicateAttr) {
+				if (attr_ in element_.attrs_)
+					error_(ValidationError.DuplicateAttr, element_.tag_, attr_);
+			}
 			element_.attr(attr_, value_);
+		}
 		value_.length = 0;
 		attr_.length = 0;
 		state_ = States.Global;
@@ -1452,6 +1523,13 @@ struct DOMBuilder(Document) {
 				document_.root.appendText(text_);
 			}
 		}
+
+		static if (ValidateClosed) {
+			while (element_ && element_ != document_.root_) {
+				error_(ValidationError.MissingClose, element_.tag, null);
+				element_ = element_.parent_;
+			}
+		}
 	}
 
 	void onNamedEntity(HTMLString data) {
@@ -1475,6 +1553,9 @@ private:
 	Document* document_;
 	Node* element_;
 	States state_;
+	static if (Validate) {
+		ValidationErrorCallable error_;
+	}
 
 	enum States {
 		Global = 0,
@@ -1484,6 +1565,45 @@ private:
 	HTMLString attr_;
 	HTMLString value_;
 	HTMLString text_;
+}
+
+
+
+unittest {
+	static struct Error {
+		ValidationError error;
+		HTMLString tag;
+		HTMLString related;
+	}
+
+	Error[] errors;
+	void errorHandler(ValidationError error, HTMLString tag, HTMLString related) {
+		errors ~= Error(error, tag, related);
+	}
+
+	errors.length = 0;
+	auto doc = createDocument(`<div><div></div>`, &errorHandler);
+	assert(errors == [Error(ValidationError.MissingClose, "div")]);
+
+	errors.length = 0;
+	doc = createDocument(`<div></div></div>`, &errorHandler);
+	assert(errors == [Error(ValidationError.StrayClose, "div")]);
+
+	errors.length = 0;
+	doc = createDocument(`<span><div></span>`, &errorHandler);
+	assert(errors == [Error(ValidationError.MismatchingClose, "span", "div")]);
+
+	errors.length = 0;
+	doc = createDocument(`<div />`, &errorHandler);
+	assert(errors == [Error(ValidationError.SelfClosingNonVoidElement, "div")]);
+
+	errors.length = 0;
+	doc = createDocument(`<hr></hr>`, &errorHandler);
+	assert(errors == [Error(ValidationError.StrayClose, "hr")]);
+
+	errors.length = 0;
+	doc = createDocument(`<span id=moo id=foo class=moo class=></span>`, &errorHandler);
+	assert(errors == [Error(ValidationError.DuplicateAttr, "span", "id"), Error(ValidationError.DuplicateAttr, "span", "class")]);
 }
 
 

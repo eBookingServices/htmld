@@ -46,25 +46,21 @@ alias ValidationErrorCallable = void delegate(ValidationError, HTMLString, HTMLS
 alias onlyElements = a => a.isElementNode;
 
 
-package NodeWrapper!T wrap(T)(T* node) {
-	return NodeWrapper!T(node);
-}
-
 private struct ChildrenForward(NodeType, alias Condition = null) {
-	this(NodeType* first) {
+	this(NodeType first) {
+		curr_ = cast(Node)first;
 		static if (!is(typeof(Condition) == typeof(null))) {
-			while (first && !Condition(first))
-				first = first.next_;
+			while (curr_ && !Condition(curr_))
+				curr_ = curr_.next_;
 		}
-		curr_ = first;
 	}
 
 	bool empty() const {
-		return (curr_ == null);
+		return (curr_ is null);
 	}
 
-	auto front() {
-		return wrap(curr_);
+	NodeType front() const {
+		return cast(NodeType)curr_;
 	}
 
 	void popFront() {
@@ -79,25 +75,25 @@ private struct ChildrenForward(NodeType, alias Condition = null) {
 		}
 	}
 
-	private NodeType* curr_;
+	private Node curr_;
 }
 
 
 private struct AncestorsForward(NodeType, alias Condition = null) {
-	this(NodeType* first) {
+	this(NodeType first) {
+		curr_ = cast(Node)first;
 		static if (!is(typeof(Condition) == typeof(null))) {
-			while (first && !Condition(first))
-				first = first.parent_;
+			while (curr_ && !Condition(curr_))
+				curr_ = curr_.parent_;
 		}
-		curr_ = first;
 	}
 
 	bool empty() const {
-		return (curr_ == null);
+		return (curr_ is null);
 	}
 
-	auto front() {
-		return wrap(curr_);
+	NodeType front() const {
+		return cast(NodeType)curr_;
 	}
 
 	void popFront() {
@@ -112,26 +108,26 @@ private struct AncestorsForward(NodeType, alias Condition = null) {
 		}
 	}
 
-	private NodeType* curr_;
+	private Node curr_;
 }
 
 
 private struct DescendantsForward(NodeType, alias Condition = null) {
-	this(NodeType* first) {
-		curr_ = first;
-		top_ = first;
+	this(NodeType first) {
+		curr_ = cast(Node)first;
+		top_ = cast(Node)first;
 		static if (!is(typeof(Condition) == typeof(null))) {
-			if (!Condition(first))
+			if (!Condition(curr_))
 				popFront;
 		}
 	}
 
 	bool empty() const {
-		return (curr_ == null);
+		return (curr_ is null);
 	}
 
-	auto front() {
-		return wrap(curr_);
+	NodeType front() const {
+		return cast(NodeType)curr_;
 	}
 
 	void popFront() {
@@ -139,9 +135,9 @@ private struct DescendantsForward(NodeType, alias Condition = null) {
 			if (curr_.firstChild_) {
 				curr_ = curr_.firstChild_;
 			} else if (curr_ != top_) {
-				NodeType* next = curr_.next_;
+				auto next = curr_.next_;
 				if (!next) {
-					NodeType* parent = curr_.parent_;
+					Node parent = curr_.parent_;
 					while (parent) {
 						if (parent != top_) {
 							if (parent.next_) {
@@ -173,10 +169,9 @@ private struct DescendantsForward(NodeType, alias Condition = null) {
 		}
 	}
 
-	private NodeType* curr_;
-	private NodeType* top_;
+	private Node curr_;
+	private Node top_;
 }
-
 
 unittest {
 	const doc = createDocument(`<div id=a><div id=b></div><div id=c><div id=e></div><div id=f><div id=h></div></div><div id=g></div></div><div id=d></div></div>`);
@@ -200,11 +195,11 @@ private struct QuerySelectorMatcher(NodeType, Nodes) if (isInputRange!Nodes) {
 	}
 
 	bool empty() const {
-		return curr_ == null;
+		return curr_ is null;
 	}
 
-	auto front() {
-		return wrap(curr_);
+	NodeType front() const {
+		return cast(NodeType)curr_;
 	}
 
 	void popFront() {
@@ -213,46 +208,16 @@ private struct QuerySelectorMatcher(NodeType, Nodes) if (isInputRange!Nodes) {
 			nodes_.popFront;
 
 			if (node.isElementNode && selector_.matches(node)) {
-				curr_ = node;
+				curr_ = cast(Node)node;
 				return;
 			}
 		}
 		curr_ = null;
 	}
 
-	private NodeType* curr_;
+	private Node curr_;
 	private Nodes nodes_;
 	private Selector selector_;
-}
-
-
-struct NodeWrapper(NodeType) {
-	package this(NodeType* node) {
-		node_ = node;
-	}
-
-	alias node_ this;
-	NodeType* node_;
-
-	auto opIndex(HTMLString name) const {
-		return node_.attr(name);
-	}
-
-	void opIndexAssign(T)(T value, HTMLString name) {
-		node_.attr(name, value.to!string);
-	}
-
-	@property auto id() const {
-		return node_.attr("id");
-	}
-
-	@property void id(T)(T value) {
-		node_.attr("id", value.to!string);
-	}
-
-	auto toString() const {
-		return node_ ? node_.toString() : "null";
-	}
 }
 
 
@@ -266,9 +231,38 @@ enum NodeTypes : ubyte {
 }
 
 
-struct Node {
+class Node {
 	@disable this();
-	@disable this(this);
+
+	private this(HTMLString tag, Document document, size_t flags) {
+		flags_ = flags;
+		tag_ = tag;
+
+		parent_ = null;
+		firstChild_ = null;
+		lastChild_ = null;
+
+		prev_ = null;
+		next_ = null;
+
+		document_ = document;
+	}
+
+	auto opIndex(HTMLString name) const {
+		return attr(name);
+	}
+
+	void opIndexAssign(T)(T value, HTMLString name) {
+		attr(name, value.to!string);
+	}
+
+	@property auto id() const {
+		return attr("id");
+	}
+
+	@property void id(T)(T value) {
+		attr("id", value.to!string);
+	}
 
 	@property auto type() const {
 		return (flags_ & TypeMask) >> TypeShift;
@@ -298,7 +292,7 @@ struct Node {
 		if (isTextNode) {
 			app.put(tag_);
 		} else {
-			const(Node)* child = firstChild_;
+			Node child = cast(Node)firstChild_;
 			while (child) {
 				child.text(app);
 				child = child.next_;
@@ -306,7 +300,7 @@ struct Node {
 		}
 	}
 
-	@property auto text() {
+	@property auto text() const {
 		if (isTextNode) {
 			return tag_;
 		} else {
@@ -352,7 +346,7 @@ struct Node {
 
 		destroyChildren();
 
-		auto builder = DOMBuilder!(Document, Options)(*document_, &this);
+		auto builder = DOMBuilder!(Document, Options)(document_, this);
 		parseHTML!(typeof(builder), parserOptions)(html, builder);
 	}
 
@@ -370,23 +364,23 @@ struct Node {
 
 	@property auto outerHTML() const {
 		Appender!HTMLString app;
-		outerHTML!(typeof(app))(app);
+		outerHTML(app);
 		return app.data;
 	}
 
 	@property auto compactOuterHTML() const {
 		Appender!HTMLString app;
-		compactOuterHTML!(typeof(app))(app);
+		compactOuterHTML(app);
 		return app.data;
 	}
 
-	void prependChild(Node* node) {
+	void prependChild(Node node) {
 		assert(document_ == node.document_);
 		assert(isElementNode, "cannot prepend to non-element nodes");
 
 		if (node.parent_)
 			node.detach();
-		node.parent_ = &this;
+		node.parent_ = this;
 		if (firstChild_) {
 			assert(!firstChild_.prev_);
 			firstChild_.prev_ = node;
@@ -399,13 +393,13 @@ struct Node {
 		}
 	}
 
-	void appendChild(Node* node) {
+	void appendChild(Node node) {
 		assert(document_ == node.document_);
 		assert(isElementNode, "cannot append to non-element nodes");
 
 		if (node.parent_)
 			node.detach();
-		node.parent_ = &this;
+		node.parent_ = this;
 		if (lastChild_) {
 			assert(!lastChild_.next_);
 			lastChild_.next_ = node;
@@ -418,8 +412,8 @@ struct Node {
 		}
 	}
 
-	void removeChild(Node* node) {
-		assert(node.parent_ == &this);
+	void removeChild(Node node) {
+		assert(node.parent_ == this);
 		node.detach();
 	}
 
@@ -438,64 +432,64 @@ struct Node {
 	void prependText(HTMLString text) {
 		auto node = document_.createTextNode(text);
 		if (firstChild_) {
-			assert(firstChild_.prev_ == null);
+			assert(firstChild_.prev_ is null);
 			firstChild_.prev_ = node;
 			node.next_ = firstChild_;
 			firstChild_ = node;
 		} else {
-			assert(lastChild_ == null);
+			assert(lastChild_ is null);
 			firstChild_ = node;
 			lastChild_ = node;
 		}
-		node.parent_ = &this;
+		node.parent_ = this;
 	}
 
 	void appendText(HTMLString text) {
 		auto node = document_.createTextNode(text);
 		if (lastChild_) {
-			assert(lastChild_.next_ == null);
+			assert(lastChild_.next_ is null);
 			lastChild_.next_ = node;
 			node.prev_ = lastChild_;
 			lastChild_ = node;
 		} else {
-			assert(firstChild_ == null);
+			assert(firstChild_ is null);
 			firstChild_ = node;
 			lastChild_ = node;
 		}
-		node.parent_ = &this;
+		node.parent_ = this;
 	}
 
-	void insertBefore(Node* node) {
+	void insertBefore(Node node) {
 		assert(document_ == node.document_);
 
 		parent_ = node.parent_;
 		prev_ = node.prev_;
 		next_ = node;
-		node.prev_ = &this;
+		node.prev_ = this;
 
 		if (prev_)
-			prev_.next_ = &this;
+			prev_.next_ = this;
 		else if (parent_)
-			parent_.firstChild_ = &this;
+			parent_.firstChild_ = this;
 	}
 
-	void insertAfter(Node* node) {
+	void insertAfter(Node node) {
 		assert(document_ == node.document_);
 
 		parent_ = node.parent_;
 		prev_ = node;
 		next_ = node.next_;
-		node.next_ = &this;
+		node.next_ = this;
 
 		if (next_)
-			next_.prev_ = &this;
+			next_.prev_ = this;
 		else if (parent_)
-			parent_.lastChild_ = &this;
+			parent_.lastChild_ = this;
 	}
 
 	void detach() {
 		if (parent_) {
-			if (parent_.firstChild_ == &this) {
+			if (parent_.firstChild_ == this) {
 				parent_.firstChild_ = next_;
 				if (next_) {
 					next_.prev_ = null;
@@ -504,11 +498,11 @@ struct Node {
 					parent_.lastChild_ = null;
 				}
 
-				assert(prev_ == null);
-			} else if (parent_.lastChild_ == &this) {
+				assert(prev_ is null);
+			} else if (parent_.lastChild_ == this) {
 				parent_.lastChild_ = prev_;
 				assert(prev_);
-				assert(!next_);
+				assert(next_ is null);
 				prev_.next_ = null;
 				prev_ = null;
 			} else {
@@ -527,7 +521,7 @@ struct Node {
 
 	package void detachFast() {
 		if (parent_) {
-			if (parent_.firstChild_ == &this) {
+			if (parent_.firstChild_ == this) {
 				parent_.firstChild_ = next_;
 				if (next_) {
 					next_.prev_ = null;
@@ -535,11 +529,11 @@ struct Node {
 					parent_.lastChild_ = null;
 				}
 
-				assert(prev_ == null);
-			} else if (parent_.lastChild_ == &this) {
+				assert(prev_ is null);
+			} else if (parent_.lastChild_ == this) {
 				parent_.lastChild_ = prev_;
 				assert(prev_);
-				assert(!next_);
+				assert(next_ !is null);
 				prev_.next_ = null;
 			} else {
 				assert(prev_);
@@ -555,11 +549,11 @@ struct Node {
 	void destroy() {
 		detachFast();
 		destroyChildren();
-		document_.destroyNode(&this);
+		document_.destroyNode(this);
 	}
 
 	void innerHTML(Appender)(ref Appender app) const {
-		const(Node)* child = firstChild_;
+		auto child = cast(Node)firstChild_;
 		while (child) {
 			child.outerHTML(app);
 			child = child.next_;
@@ -567,7 +561,7 @@ struct Node {
 	}
 
 	void compactInnerHTML(Appender)(ref Appender app) const {
-		const(Node)* child = firstChild_;
+		auto child = cast(Node)firstChild_;
 		while (child) {
 			child.compactOuterHTML(app);
 			child = child.next_;
@@ -689,16 +683,16 @@ struct Node {
 
 			if (tag_.isAllWhite()) {
 				size_t aroundCount;
-				const(Node)*[2] around;
+				Node[2] around;
 
-				around.ptr[aroundCount] = prev_;
+				around.ptr[aroundCount] = cast(Node)prev_;
 				if (!around.ptr[aroundCount])
-					around.ptr[aroundCount] = parent_;
+					around.ptr[aroundCount] = cast(Node)parent_;
 				if (around.ptr[aroundCount])
 					++aroundCount;
-				around.ptr[aroundCount] = next_;
+				around.ptr[aroundCount] = cast(Node)next_;
 				if (!around.ptr[aroundCount])
-					around.ptr[aroundCount] = parent_;
+					around.ptr[aroundCount] = cast(Node)parent_;
 				if (around.ptr[aroundCount] && (!aroundCount || (around.ptr[aroundCount] != around.ptr[aroundCount - 1])))
 					++aroundCount;
 
@@ -712,6 +706,7 @@ struct Node {
 						case tagHashOf("meta"):
 						case tagHashOf("link"):
 						case tagHashOf("script"):
+						case tagHashOf("noscript"):
 						case tagHashOf("style"):
 						case tagHashOf("body"):
 						case tagHashOf("br"):
@@ -829,50 +824,50 @@ struct Node {
 		}
 	}
 
-	auto toString() const {
+	override string toString() const {
 		Appender!HTMLString app;
 		toString(app);
-		return app.data;
+		return cast(string)app.data;
 	}
 
 	@property auto parent() const {
-		return wrap(parent_);
+		return parent_;
 	}
 
 	@property auto parent() {
-		return wrap(parent_);
+		return parent_;
 	}
 
 	@property auto firstChild() const {
-		return wrap(firstChild_);
+		return firstChild_;
 	}
 
 	@property auto firstChild() {
-		return wrap(firstChild_);
+		return firstChild_;
 	}
 
 	@property auto lastChild() const {
-		return wrap(lastChild_);
+		return lastChild_;
 	}
 
 	@property auto lastChild() {
-		return wrap(lastChild_);
+		return lastChild_;
 	}
 
 	@property auto previousSibling() const {
-		return wrap(prev_);
+		return prev_;
 	}
 
 	@property auto previousSibling() {
-		return wrap(prev_);
+		return prev_;
 	}
 
 	@property auto nextSibling() const {
-		return wrap(next_);
+		return next_;
 	}
 
 	@property auto nextSibling() {
-		return wrap(next_);
+		return next_;
 	}
 
 	@property auto children() const {
@@ -892,51 +887,51 @@ struct Node {
 	}
 
 	auto find(HTMLString selector) const {
-		return document_.querySelectorAll(selector, &this);
+		return document_.querySelectorAll(selector, this);
 	}
 
 	auto find(HTMLString selector) {
-		return document_.querySelectorAll(selector, &this);
+		return document_.querySelectorAll(selector, this);
 	}
 
 	auto find(Selector selector) const {
-		return document_.querySelectorAll(selector, &this);
+		return document_.querySelectorAll(selector, this);
 	}
 
 	auto find(Selector selector) {
-		return document_.querySelectorAll(selector, &this);
+		return document_.querySelectorAll(selector, this);
 	}
 
-	NodeWrapper!(const(Node)) closest(HTMLString selector) const {
+	auto closest(HTMLString selector) const {
 		auto rules = Selector.parse(selector);
 		return closest(rules);
 	}
 
-	NodeWrapper!Node closest(HTMLString selector) {
+	Node closest(HTMLString selector) {
 		auto rules = Selector.parse(selector);
 		return closest(rules);
 	}
 
-	NodeWrapper!(const(Node)) closest(Selector selector) const {
-		if (selector.matches(&this))
-			return wrap(&this);
+	auto closest(Selector selector) const {
+		if (selector.matches(this))
+			return this;
 
 		foreach (node; ancestors) {
 			if (selector.matches(node))
 				return node;
 		}
-		return NodeWrapper!(const(Node))(null);
+		return null;
 	}
 
-	NodeWrapper!Node closest(Selector selector) {
-		if (selector.matches(&this))
-			return wrap(&this);
+	Node closest(Selector selector) {
+		if (selector.matches(this))
+			return this;
 
 		foreach (node; ancestors) {
 			if (selector.matches(node))
 				return node;
 		}
-		return NodeWrapper!Node(null);
+		return null;
 	}
 
 	@property auto ancestors() const {
@@ -1006,15 +1001,15 @@ struct Node {
 		return type == NodeTypes.ProcessingInstruction;
 	}
 
-	Node* clone(Document* document) const {
+	Node clone(Document document) const {
 		auto node = document.allocNode(tag_, flags_);
 
 		foreach (HTMLString attr, HTMLString value; attrs_)
 			node.attrs_[attr] = value;
 
-		const(Node)* current = firstChild_;
+		Node current = cast(Node)firstChild_;
 
-		while (current != null) {
+		while (current !is null) {
 			auto newChild = current.clone(document);
 			node.appendChild(newChild);
 			current = current.next_;
@@ -1022,8 +1017,8 @@ struct Node {
 		return node;
 	}
 
-	Node* clone() {
-		return document_.cloneNode(&this);
+	Node clone() const {
+		return document_.cloneNode(this);
 	}
 
 package:
@@ -1038,15 +1033,15 @@ package:
 	HTMLString tag_; // when Text flag is set, will contain the text itself
 	HTMLString[HTMLString] attrs_;
 
-	Node* parent_;
-	Node* firstChild_;
-	Node* lastChild_;
+	Node parent_;
+	Node firstChild_;
+	Node lastChild_;
 
 	// siblings
-	Node* prev_;
-	Node* next_;
+	Node prev_;
+	Node next_;
 
-	Document* document_;
+	Document document_;
 }
 
 
@@ -1142,86 +1137,79 @@ unittest {
 
 
 static auto createDocument(IAllocator alloc = theAllocator) {
-	auto document = Document(alloc);
+	auto document = new Document(alloc);
 	document.root(document.createElement("root"));
 	return document;
 }
 
 
-struct Document {
+class Document {
 	private this(IAllocator alloc) {
 		alloc_ = alloc;
 	}
 
-	@disable this(this);
-
-	bool opCast() const {
-		return root_ !is null;
-	}
-
-	auto createElement(HTMLString tagName, Node* parent = null) {
+	auto createElement(HTMLString tagName, Node parent = null) {
 		auto node = allocNode(tagName, NodeTypes.Element << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	auto createTextNode(HTMLString text, Node* parent = null) {
+	auto createTextNode(HTMLString text, Node parent = null) {
 		auto node = allocNode(text, NodeTypes.Text << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	auto createCommentNode(HTMLString comment, Node* parent = null) {
+	auto createCommentNode(HTMLString comment, Node parent = null) {
 		auto node = allocNode(comment, NodeTypes.Comment << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	auto createCDATANode(HTMLString cdata, Node* parent = null) {
+	auto createCDATANode(HTMLString cdata, Node parent = null) {
 		auto node = allocNode(cdata, NodeTypes.CDATA << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	auto createDeclarationNode(HTMLString data, Node* parent = null) {
+	auto createDeclarationNode(HTMLString data, Node parent = null) {
 		auto node = allocNode(data, NodeTypes.Declaration << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	auto createProcessingInstructionNode(HTMLString data, Node* parent = null) {
+	auto createProcessingInstructionNode(HTMLString data, Node parent = null) {
 		auto node = allocNode(data, NodeTypes.ProcessingInstruction << Node.TypeShift);
 		if (parent)
 			parent.appendChild(node);
-		return wrap(node);
+		return node;
 	}
 
-	Node* cloneNode(const(Node)* other) {
-		return other.clone(&this);
+	Node cloneNode(const(Node) other) const {
+		return other.clone(cast(Document)this);
 	}
 
-	Document clone(IAllocator alloc = theAllocator) const {
-		Document other = Document();
-		other.alloc_ = alloc;
+	Document clone(IAllocator alloc = theAllocator) {
+		Document other = new Document(alloc);
 		other.root(other.cloneNode(this.root_));
 		return other;
 	}
 
 	@property auto root() {
-		return wrap(root_);
+		return root_;
 	}
 
 	@property auto root() const {
-		return wrap(root_);
+		return root_;
 	}
 
-	@property void root(Node* root) {
-		if (root.document_.alloc_ != alloc_)
+	@property void root(Node root) {
+		if (root && (root.document_.alloc_ != alloc_))
 			alloc_ = root.document_.alloc_;
 		root_ = root;
 	}
@@ -1250,55 +1238,55 @@ struct Document {
 		return DescendantsForward!(Node, (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
 	}
 
-	NodeWrapper!(const(Node)) querySelector(HTMLString selector, Node* context = null) const {
+	const(Node) querySelector(HTMLString selector, Node context = null) const {
 		auto rules = Selector.parse(selector);
 		return querySelector(rules, context);
 	}
 
-	NodeWrapper!Node querySelector(HTMLString selector, Node* context = null) {
+	Node querySelector(HTMLString selector, Node context = null) {
 		auto rules = Selector.parse(selector);
 		return querySelector(rules, context);
 	}
 
-	NodeWrapper!(const(Node)) querySelector(Selector selector, const(Node)* context = null) const {
+	const(Node) querySelector(Selector selector, const(Node) context = null) const {
 		auto top = context ? context : root_;
 
 		foreach(node; DescendantsForward!(const(Node), onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
-		return NodeWrapper!(const(Node))(null);
+		return null;
 	}
 
-	NodeWrapper!Node querySelector(Selector selector, Node* context = null) {
+	Node querySelector(Selector selector, Node context = null) {
 		auto top = context ? context : root_;
 
 		foreach(node; DescendantsForward!(Node, onlyElements)(top)) {
 			if (selector.matches(node))
 				return node;
 		}
-		return NodeWrapper!Node(null);
+		return null;
 	}
 
 	alias QuerySelectorAllResult = QuerySelectorMatcher!(Node, DescendantsForward!Node);
 	alias QuerySelectorAllConstResult = QuerySelectorMatcher!(const(Node), DescendantsForward!(const(Node)));
 
-	QuerySelectorAllResult querySelectorAll(HTMLString selector, Node* context = null) {
+	QuerySelectorAllResult querySelectorAll(HTMLString selector, Node context = null) {
 		auto rules = Selector.parse(selector);
 		return querySelectorAll(rules, context);
 	}
 
-	QuerySelectorAllConstResult querySelectorAll(HTMLString selector, const(Node)* context = null) const {
+	QuerySelectorAllConstResult querySelectorAll(HTMLString selector, const(Node) context = null) const {
 		auto rules = Selector.parse(selector);
 		return querySelectorAll(rules, context);
 	}
 
-	QuerySelectorAllConstResult querySelectorAll(Selector selector, const(Node)* context = null) const {
+	QuerySelectorAllConstResult querySelectorAll(Selector selector, const(Node) context = null) const {
 		auto top = context ? context : root_;
 		return QuerySelectorMatcher!(const(Node), DescendantsForward!(const(Node)))(selector, DescendantsForward!(const(Node))(top));
 	}
 
-	QuerySelectorAllResult querySelectorAll(Selector selector, Node* context = null) {
+	QuerySelectorAllResult querySelectorAll(Selector selector, Node context = null) {
 		auto top = context ? context : root_;
 		return QuerySelectorMatcher!(Node, DescendantsForward!Node)(selector, DescendantsForward!Node(top));
 	}
@@ -1307,39 +1295,27 @@ struct Document {
 		root_.outerHTML(app);
 	}
 
-	HTMLString toString() const {
+	override string toString() const {
 		auto app = appender!HTMLString;
 		root_.outerHTML(app);
-		return app.data;
+		return cast(string)app.data;
 	}
 
 	auto allocNode()(HTMLString tag, size_t flags) {
-		auto ptr = cast(Node*)alloc_.allocate(max(stateSize!Node, 1)).ptr;
-		if (ptr) {
-			ptr.flags_ = flags;
-			ptr.tag_ = tag;
-			ptr.attrs_ = null;
-
-			ptr.parent_ = null;
-			ptr.firstChild_ = null;
-			ptr.lastChild_ = null;
-
-			ptr.prev_ = null;
-			ptr.next_ = null;
-
-			ptr.document_ = &this;
-		}
-
+		enum NodeSize = __traits(classInstanceSize, Node);
+		auto ptr = cast(Node)alloc_.allocate(NodeSize).ptr;
+		(cast(void*)ptr)[0..NodeSize] = typeid(Node).initializer[];
+		ptr.__ctor(tag, this, flags);
 		return ptr;
 	}
 
-	void destroyNode(Node* node) {
+	void destroyNode(Node node) {
 		assert(node.firstChild_ is null);
-		alloc_.deallocate((cast(void*)node)[0..Node.sizeof]);
+		alloc_.dispose(node);
 	}
 
 private:
-	Node* root_;
+	Node root_;
 	IAllocator alloc_;
 }
 
@@ -1387,14 +1363,14 @@ struct DOMBuilder(Document, size_t Options) {
 	}
 
 	static if (Validate) {
-		this(ref Document document, ValidationErrorCallable errorCallable, Node* parent = null) {
-			document_ = &document;
+		this(Document document, ValidationErrorCallable errorCallable, Node parent = null) {
+			document_ = document;
 			element_ = parent ? parent : document.root;
 			error_ = errorCallable;
 		}
 	} else {
-		this(ref Document document, Node* parent = null) {
-			document_ = &document;
+		this(Document document, Node parent = null) {
+			document_ = document;
 			element_ = parent ? parent : document.root;
 		}
 	}
@@ -1550,8 +1526,8 @@ struct DOMBuilder(Document, size_t Options) {
 	}
 
 private:
-	Document* document_;
-	Node* element_;
+	Document document_;
+	Node element_;
 	States state_;
 	static if (Validate) {
 		ValidationErrorCallable error_;
@@ -1762,7 +1738,7 @@ private struct Rule {
 				break;
 
 			case quickHashOf("first-of-type"):
-				auto sibling = element.previousSibling;
+				Node sibling = element.previousSibling;
 				while (sibling) {
 					if (sibling.isElementNode && sibling.tag.equalsCI(element.tag))
 						return false;
@@ -1852,9 +1828,9 @@ private struct Rule {
 
 			case quickHashOf("only-child"):
 				auto parent = element.parent_;
-				if (!parent)
+				if (parent is null)
 					return false;
-				const(Node)* sibling = parent.firstChild_;
+				Node sibling = parent.firstChild_;
 				while (sibling) {
 					if ((sibling != element) && sibling.isElementNode)
 						return false;
@@ -2211,7 +2187,8 @@ struct Selector {
 		return selector;
 	}
 
-	bool matches(NodeType)(const(NodeType)* element) {
+	bool matches(const(Node) node) {
+		auto element = cast(Node)node;
 		if (rules_.empty)
 			return false;
 
@@ -2223,7 +2200,7 @@ struct Selector {
 					return false;
 				break;
 			case Descendant:
-				const(Node)* parent = element.parent_;
+				auto parent = element.parent_;
 				while (parent) {
 					if (rule.matches(parent)) {
 						element = parent;

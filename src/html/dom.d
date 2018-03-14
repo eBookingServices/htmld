@@ -15,6 +15,9 @@ import html.utils;
 
 
 alias HTMLString = const(char)[];
+static if(__VERSION__ >= 2079){
+	alias IAllocator = RCIAllocator;
+}
 
 enum DOMCreateOptions {
 	None = 0,

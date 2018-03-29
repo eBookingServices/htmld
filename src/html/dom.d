@@ -2119,7 +2119,7 @@ struct Selector {
 				if (*ptr == ']') {
 					state = PostIdentifier;
 				} else if (*ptr == 'i') {
-					rule.flags_ &= ~(Rule.Flags.CaseSensitive);
+					rule.flags_ &= ~cast(int)Rule.Flags.CaseSensitive;
 				}
 				break;
 

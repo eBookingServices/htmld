@@ -137,12 +137,12 @@ private struct DescendantsForward(NodeType, alias Condition = null) {
 		while (curr_) {
 			if (curr_.firstChild_) {
 				curr_ = curr_.firstChild_;
-			} else if (curr_ != top_) {
+			} else if (curr_ !is top_) {
 				auto next = curr_.next_;
 				if (!next) {
 					Node parent = curr_.parent_;
 					while (parent) {
-						if (parent != top_) {
+						if (parent !is top_) {
 							if (parent.next_) {
 								next = parent.next_;
 								break;
@@ -194,31 +194,35 @@ private struct QuerySelectorMatcher(NodeType, Nodes) if (isInputRange!Nodes) {
 	this(Selector selector, Nodes nodes) {
 		selector_ = selector;
 		nodes_ = nodes;
-		popFront;
+
+		while (!nodes_.empty()) {
+			auto node = nodes_.front();
+			if (node.isElementNode && selector_.matches(node))
+				break;
+
+			nodes_.popFront();
+		}
 	}
 
 	bool empty() const {
-		return curr_ is null;
+		return nodes_.empty();
 	}
 
 	NodeType front() const {
-		return cast(NodeType)curr_;
+		return cast(NodeType)nodes_.front();
 	}
 
 	void popFront() {
-		while (!nodes_.empty) {
-			auto node = nodes_.front;
-			nodes_.popFront;
+		nodes_.popFront();
+		while (!nodes_.empty()) {
+			auto node = nodes_.front();
+			if (node.isElementNode && selector_.matches(node))
+				break;
 
-			if (node.isElementNode && selector_.matches(node)) {
-				curr_ = cast(Node)node;
-				return;
-			}
+			nodes_.popFront();
 		}
-		curr_ = null;
 	}
 
-	private Node curr_;
 	private Nodes nodes_;
 	private Selector selector_;
 }
@@ -416,7 +420,7 @@ class Node {
 	}
 
 	void removeChild(Node node) {
-		assert(node.parent_ == this);
+		assert(node.parent_ is this);
 		node.detach();
 	}
 
@@ -463,7 +467,7 @@ class Node {
 	}
 
 	void insertBefore(Node node) {
-		assert(document_ == node.document_);
+		assert(document_ is node.document_);
 
 		parent_ = node.parent_;
 		prev_ = node.prev_;
@@ -477,7 +481,7 @@ class Node {
 	}
 
 	void insertAfter(Node node) {
-		assert(document_ == node.document_);
+		assert(document_ is node.document_);
 
 		parent_ = node.parent_;
 		prev_ = node;
@@ -492,7 +496,7 @@ class Node {
 
 	void detach() {
 		if (parent_) {
-			if (parent_.firstChild_ == this) {
+			if (parent_.firstChild_ is this) {
 				parent_.firstChild_ = next_;
 				if (next_) {
 					next_.prev_ = null;
@@ -502,7 +506,7 @@ class Node {
 				}
 
 				assert(prev_ is null);
-			} else if (parent_.lastChild_ == this) {
+			} else if (parent_.lastChild_ is this) {
 				parent_.lastChild_ = prev_;
 				assert(prev_);
 				assert(next_ is null);
@@ -524,7 +528,7 @@ class Node {
 
 	package void detachFast() {
 		if (parent_) {
-			if (parent_.firstChild_ == this) {
+			if (parent_.firstChild_ is this) {
 				parent_.firstChild_ = next_;
 				if (next_) {
 					next_.prev_ = null;
@@ -533,7 +537,7 @@ class Node {
 				}
 
 				assert(prev_ is null);
-			} else if (parent_.lastChild_ == this) {
+			} else if (parent_.lastChild_ is this) {
 				parent_.lastChild_ = prev_;
 				assert(prev_);
 				assert(next_ !is null);
@@ -696,7 +700,7 @@ class Node {
 				around.ptr[aroundCount] = cast(Node)next_;
 				if (!around.ptr[aroundCount])
 					around.ptr[aroundCount] = cast(Node)parent_;
-				if (around.ptr[aroundCount] && (!aroundCount || (around.ptr[aroundCount] != around.ptr[aroundCount - 1])))
+				if (around.ptr[aroundCount] && (!aroundCount || (around.ptr[aroundCount] !is around.ptr[aroundCount - 1])))
 					++aroundCount;
 
 				auto tagsMatch = true;
@@ -1504,7 +1508,7 @@ struct DOMBuilder(Document, size_t Options) {
 		}
 
 		static if (ValidateClosed) {
-			while (element_ && element_ != document_.root_) {
+			while (element_ && element_ !is document_.root_) {
 				error_(ValidationError.MissingClose, element_.tag, null);
 				element_ = element_.parent_;
 			}
@@ -1731,12 +1735,12 @@ private struct Rule {
 				break;
 
 			case quickHashOf("first-child"):
-				if (!element.parent_ || (element.parent_.firstChild != element))
+				if (!element.parent_ || (element.parent_.firstChild !is element))
 					return false;
 				break;
 
 			case quickHashOf("last-child"):
-				if (!element.parent_ || (element.parent_.lastChild != element))
+				if (!element.parent_ || (element.parent_.lastChild !is element))
 					return false;
 				break;
 
@@ -1835,7 +1839,7 @@ private struct Rule {
 					return false;
 				Node sibling = parent.firstChild_;
 				while (sibling) {
-					if ((sibling != element) && sibling.isElementNode)
+					if ((sibling !is element) && sibling.isElementNode)
 						return false;
 					sibling = sibling.next_;
 				}

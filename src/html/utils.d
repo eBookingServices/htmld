@@ -41,8 +41,8 @@ bool requiresQuotes(Char)(Char[] value) {
 
 bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
 	if (a.length == b.length) {
-		for (uint i = 0; i < a.length; ++i) {
-			if (std.ascii.toLower(a[i]) != std.ascii.toLower(b[i]))
+		for (size_t i; i < a.length; ++i) {
+			if (std.ascii.toLower(a.ptr[i]) != std.ascii.toLower(b.ptr[i]))
 				return false;
 		}
 		return true;
@@ -51,19 +51,31 @@ bool equalsCI(CharA, CharB)(const(CharA)[] a, const(CharB)[] b) {
 }
 
 
-size_t quickHashOf(const(char)[] x) {
-	size_t hash = 5381;
-	foreach(i; 0..x.length)
-		hash = (hash * 33) ^ cast(size_t)(x.ptr[i]);
+enum QuickHash64Seed = 14695981039346656037u;
+enum QuickHash64Scale = 1099511628211u;
+
+
+ulong quickHash64(const(char)* p, const(char)* pend, ulong hash = QuickHash64Seed) {
+	while (p != pend)
+		hash = (hash ^ cast(ulong)(*p++)) * QuickHash64Scale;
 	return hash;
 }
 
 
-size_t tagHashOf(const(char)[] x) {
-	size_t hash = 5381;
-	foreach(i; 0..x.length)
-		hash = (hash * 33) ^ cast(size_t)(std.ascii.toLower(x.ptr[i]));
+ulong quickHash64i(const(char)* p, const(char)* pend, ulong hash = QuickHash64Seed) {
+	while (p != pend)
+		hash = (hash ^ cast(ulong)(std.ascii.toLower(*p++))) * QuickHash64Scale;
 	return hash;
+}
+
+
+hash_t quickHashOf(const(char)[] x) {
+	return cast(hash_t)quickHash64(x.ptr, x.ptr + x.length);
+}
+
+
+hash_t tagHashOf(const(char)[] x) {
+	return cast(hash_t)quickHash64i(x.ptr, x.ptr + x.length);
 }
 
 

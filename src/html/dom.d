@@ -540,7 +540,7 @@ class Node {
 			} else if (parent_.lastChild_ is this) {
 				parent_.lastChild_ = prev_;
 				assert(prev_);
-				assert(next_ !is null);
+				assert(next_ is null);
 				prev_.next_ = null;
 			} else {
 				assert(prev_);

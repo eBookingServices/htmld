@@ -116,9 +116,11 @@ private struct AncestorsForward(NodeType, alias Condition = null) {
 
 
 private struct DescendantsForward(NodeType, alias Condition = null) {
-	this(NodeType first) {
-		curr_ = cast(Node)first;
-		top_ = cast(Node)first;
+	this(NodeType top) {
+		if (top is null)
+			return;
+		curr_ = cast(Node)top.firstChild_; // top itself is excluded
+		top_ = cast(Node)top;
 		static if (!is(typeof(Condition) == typeof(null))) {
 			if (!Condition(curr_))
 				popFront;
@@ -178,7 +180,7 @@ private struct DescendantsForward(NodeType, alias Condition = null) {
 
 unittest {
 	const doc = createDocument(`<div id=a><div id=b></div><div id=c><div id=e></div><div id=f><div id=h></div></div><div id=g></div></div><div id=d></div></div>`);
-	assert(DescendantsForward!(const(Node))(doc.root).count() == 9);
+	assert(DescendantsForward!(const(Node))(doc.root).count() == 8);
 	auto fs = DescendantsForward!(const(Node), x => x.attr("id") == "f")(doc.root);
 	assert(fs.count() == 1);
 	assert(fs.front().attr("id") == "f");
@@ -186,7 +188,20 @@ unittest {
 	assert(hs.count() == 1);
 	assert(hs.front().attr("id") == "h");
 	auto divs = DescendantsForward!(const(Node))(fs.front());
-	assert(divs.count() == 2);
+	assert(divs.count() == 1);
+}
+
+unittest {
+	// multiple top-level nodes
+	const doc = createDocument(`<div id="left"></div><div id="mid"></div><div id="right"></div>`);
+	assert(DescendantsForward!(const Node)(doc.root).count() == 3);
+	assert(doc.nodes.count() == 3);
+}
+
+unittest {
+	const doc = createDocument(``);
+	assert(DescendantsForward!(const Node)(doc.root).empty);
+	assert(doc.nodes.empty);
 }
 
 
@@ -950,11 +965,11 @@ class Node {
 	}
 
 	@property auto descendants() const {
-		return DescendantsForward!(const(Node))(firstChild_);
+		return DescendantsForward!(const(Node))(this);
 	}
 
 	@property auto descendants() {
-		return DescendantsForward!Node(firstChild_);
+		return DescendantsForward!Node(this);
 	}
 
 	@property isSelfClosing() const {

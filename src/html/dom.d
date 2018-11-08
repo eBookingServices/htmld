@@ -985,6 +985,7 @@ class Node {
 		case tagHashOf("basefont"):
 		case tagHashOf("br"):
 		case tagHashOf("col"):
+		case tagHashOf("embed"):
 		case tagHashOf("hr"):
 		case tagHashOf("img"):
 		case tagHashOf("input"):
@@ -992,6 +993,8 @@ class Node {
 		case tagHashOf("link"):
 		case tagHashOf("meta"):
 		case tagHashOf("param"):
+		case tagHashOf("source"):
+		case tagHashOf("track"):
 		case tagHashOf("wbr"):
 			return true;
 		default:

@@ -274,6 +274,10 @@ class Node {
 		return attr(name);
 	}
 
+	void opIndexAssign(HTMLString value, HTMLString name) {
+		attr(name, value);
+	}
+
 	void opIndexAssign(T)(T value, HTMLString name) {
 		attr(name, value.to!string);
 	}

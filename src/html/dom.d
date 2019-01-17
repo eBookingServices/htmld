@@ -620,16 +620,11 @@ class Node {
 				app.put(">");
 			} else {
 				app.put('>');
-				switch (tagHashOf(tag_))
-				{
-				case tagHashOf("script"):
-				case tagHashOf("style"):
+				if (isScriptOrStyleElement) {
 					if (firstChild_)
 						app.put(firstChild_.tag_);
-					break;
-				default:
+				} else {
 					innerHTML(app);
-					break;
 				}
 				app.put("</");
 				app.put(tag_);
@@ -688,15 +683,11 @@ class Node {
 				app.put(">");
 			} else {
 				app.put('>');
-				switch (tagHashOf(tag_)) {
-				case tagHashOf("script"):
-				case tagHashOf("style"):
+				if (isScriptOrStyleElement) {
 					if (firstChild_)
 						app.put(firstChild_.tag_.strip());
-					break;
-				default:
+				} else {
 					compactInnerHTML(app);
-					break;
 				}
 				app.put("</");
 				app.put(tag_);
@@ -725,34 +716,7 @@ class Node {
 				auto tagsMatch = true;
 				Laround: foreach (i; 0..aroundCount) {
 					if (around.ptr[i].isElementNode) {
-						switch (tagHashOf(around.ptr[i].tag_)) {
-						case tagHashOf("html"):
-						case tagHashOf("head"):
-						case tagHashOf("title"):
-						case tagHashOf("meta"):
-						case tagHashOf("link"):
-						case tagHashOf("script"):
-						case tagHashOf("noscript"):
-						case tagHashOf("style"):
-						case tagHashOf("body"):
-						case tagHashOf("br"):
-						case tagHashOf("p"):
-						case tagHashOf("div"):
-						case tagHashOf("center"):
-						case tagHashOf("dl"):
-						case tagHashOf("form"):
-						case tagHashOf("hr"):
-						case tagHashOf("ol"):
-						case tagHashOf("ul"):
-						case tagHashOf("table"):
-						case tagHashOf("tbody"):
-						case tagHashOf("tr"):
-						case tagHashOf("td"):
-						case tagHashOf("th"):
-						case tagHashOf("tfoot"):
-						case tagHashOf("thead"):
-							continue;
-						default:
+						if (!around.ptr[i].isBlockElement) {
 							tagsMatch = false;
 							break Laround;
 						}
@@ -981,29 +945,23 @@ class Node {
 	}
 
 	@property isVoidElement() const {
-		if (!isElementNode)
-			return false;
-		switch (tagHashOf(tag_)) {
-		case tagHashOf("area"):
-		case tagHashOf("base"):
-		case tagHashOf("basefont"):
-		case tagHashOf("br"):
-		case tagHashOf("col"):
-		case tagHashOf("embed"):
-		case tagHashOf("hr"):
-		case tagHashOf("img"):
-		case tagHashOf("input"):
-		case tagHashOf("isindex"):
-		case tagHashOf("link"):
-		case tagHashOf("meta"):
-		case tagHashOf("param"):
-		case tagHashOf("source"):
-		case tagHashOf("track"):
-		case tagHashOf("wbr"):
-			return true;
-		default:
-			return false;
-		}
+		return (flags_ & Flags.VoidElement) != 0;
+	}
+
+	@property isBlockElement() const {
+		return (flags_ & Flags.BlockElement) != 0;
+	}
+
+	@property isScriptElement() const {
+		return (flags_ & Flags.ScriptElement) != 0;
+	}
+
+	@property isStyleElement() const {
+		return (flags_ & Flags.StyleElement) != 0;
+	}
+
+	@property isScriptOrStyleElement() const {
+		return (flags_ & (Flags.ScriptElement | Flags.StyleElement)) != 0;
 	}
 
 	@property isElementNode() const {
@@ -1055,7 +1013,11 @@ package:
 	enum TypeShift	= 0UL;
 	enum FlagsBit	= TypeMask + 1;
 	enum Flags {
-		SelfClosing = FlagsBit << 1,
+		SelfClosing		= FlagsBit << 1,
+		VoidElement		= FlagsBit << 2,
+		BlockElement	= FlagsBit << 3,
+		ScriptElement	= FlagsBit << 4,
+		StyleElement	= FlagsBit << 5,
 	}
 
 	size_t flags_;
@@ -1430,6 +1392,66 @@ struct DOMBuilder(Document, size_t Options) {
 		}
 
 		element_ = document_.createElement(data, element_);
+		element_.flags_ |= elementFlags(data);
+	}
+
+	size_t elementFlags(const(char)[] tag) {
+		size_t flags;
+		switch (tagHashOf(tag)) {
+		case tagHashOf("body"):
+		case tagHashOf("center"):
+		case tagHashOf("div"):
+		case tagHashOf("dl"):
+		case tagHashOf("form"):
+		case tagHashOf("head"):
+		case tagHashOf("html"):
+		case tagHashOf("noscript"):
+		case tagHashOf("ol"):
+		case tagHashOf("p"):
+		case tagHashOf("table"):
+		case tagHashOf("tbody"):
+		case tagHashOf("td"):
+		case tagHashOf("tfoot"):
+		case tagHashOf("th"):
+		case tagHashOf("thead"):
+		case tagHashOf("title"):
+		case tagHashOf("tr"):
+		case tagHashOf("ul"):
+			flags |= Node.Flags.BlockElement;
+			break;
+		case tagHashOf("br"):
+		case tagHashOf("hr"):
+		case tagHashOf("link"):
+		case tagHashOf("meta"):
+			flags |= Node.Flags.BlockElement;
+			flags |= Node.Flags.VoidElement;
+			break;
+		case tagHashOf("area"):
+		case tagHashOf("base"):
+		case tagHashOf("basefont"):
+		case tagHashOf("col"):
+		case tagHashOf("embed"):
+		case tagHashOf("img"):
+		case tagHashOf("input"):
+		case tagHashOf("isindex"):
+		case tagHashOf("param"):
+		case tagHashOf("source"):
+		case tagHashOf("track"):
+		case tagHashOf("wbr"):
+			flags |= Node.Flags.VoidElement;
+			break;
+		case tagHashOf("script"):
+			flags |= Node.Flags.BlockElement;
+			flags |= Node.Flags.ScriptElement;
+			break;
+		case tagHashOf("style"):
+			flags |= Node.Flags.BlockElement;
+			flags |= Node.Flags.StyleElement;
+			break;
+		default:
+			break;
+		}
+		return flags;
 	}
 
 	void onOpenEnd(HTMLString data) {

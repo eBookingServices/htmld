@@ -80,27 +80,30 @@ hash_t tagHashOf(const(char)[] x) {
 
 
 void writeQuotesEscaped(Appender)(ref Appender app, const(char)[] x) {
-	foreach (dchar ch; x) {
-		switch (ch) {
-			case '"':
-				app.put("&#34;"); // shorter than &quot;
-				static assert('"' == 34);
-				break;
-			default:
-				app.put(ch);
-				break;
+	auto ptr = x.ptr;
+	const end = x.ptr + x.length;
+
+	while (ptr != end) {
+		const ch = *ptr++;
+		if (ch != '"') {
+			app.put(ch);
+		} else {
+			app.put("&#34;"); // shorter than &quot;
 		}
 	}
 }
 
 
 void writeHTMLEscaped(Flag!q{escapeQuotes} escapeQuotes, Appender)(ref Appender app, const(char)[] x) {
-	foreach (dchar ch; x) {
+	auto ptr = x.ptr;
+	const end = x.ptr + x.length;
+
+	while (ptr != end) {
+		const ch = *ptr++;
 		switch (ch) {
 			static if (escapeQuotes) {
 				case '"':
 					app.put("&#34;"); // shorter than &quot;
-					static assert('"' == 34);
 					break;
 			}
 			case '<':

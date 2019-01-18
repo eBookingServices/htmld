@@ -21,7 +21,7 @@ static if(__VERSION__ >= 2079){
 
 enum DOMCreateOptions {
 	None = 0,
-	DecodeEntities  		= 1 << 0,
+	DecodeEntities			= 1 << 0,
 
 	ValidateClosed			= 1 << 10,
 	ValidateSelfClosing		= 1 << 11,
@@ -298,6 +298,10 @@ class Node {
 		return isElementNode ? tag_ : null;
 	}
 
+	@property auto tagHash() const {
+		return isElementNode ? tagHash_ : 0;
+	}
+
 	@property auto comment() const {
 		return isCommentNode ? tag_ : null;
 	}
@@ -349,6 +353,14 @@ class Node {
 		assert(isElementNode, "cannot set attributes of non-element nodes");
 
 		attrs_[name] = value;
+
+		if (name == "id") {
+			if (!value.empty()) {
+				flags_ |= Node.Flags.HasID;
+			} else {
+				flags_ &= ~Node.Flags.HasID;
+			}
+		}
 	}
 
 	@property HTMLString attr(HTMLString name) const {
@@ -964,6 +976,10 @@ class Node {
 		return (flags_ & (Flags.ScriptElement | Flags.StyleElement)) != 0;
 	}
 
+	@property bool hasID() const {
+		return (flags_ & Flags.HasID) != 0;
+	}
+
 	@property isElementNode() const {
 		return type == NodeTypes.Element;
 	}
@@ -1018,9 +1034,12 @@ package:
 		BlockElement	= FlagsBit << 3,
 		ScriptElement	= FlagsBit << 4,
 		StyleElement	= FlagsBit << 5,
+
+		HasID			= FlagsBit << 6,
 	}
 
 	size_t flags_;
+	hash_t tagHash_;
 	HTMLString tag_; // when Text flag is set, will contain the text itself
 	HTMLString[HTMLString] attrs_;
 
@@ -1141,6 +1160,7 @@ class Document {
 
 	auto createElement(HTMLString tagName, Node parent = null) {
 		auto node = allocNode(tagName, NodeTypes.Element << Node.TypeShift);
+		node.tagHash_ = tagHashOf(tagName);
 		if (parent)
 			parent.appendChild(node);
 		return node;
@@ -1222,11 +1242,13 @@ class Document {
 	}
 
 	@property auto elementsByTagName(HTMLString tag) const {
-		return DescendantsForward!(const(Node), (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
+		const tagHash = tagHashOf(tag);
+		return DescendantsForward!(const(Node), (a) { return a.isElementNode && (a.tagHash == tagHash); })(root_);
 	}
 
 	@property auto elementsByTagName(HTMLString tag) {
-		return DescendantsForward!(Node, (a) { return a.isElementNode && (a.tag.equalsCI(tag)); })(root_);
+		const tagHash = tagHashOf(tag);
+		return DescendantsForward!(Node, (a) { return a.isElementNode && (a.tagHash == tagHash); })(root_);
 	}
 
 	const(Node) querySelector(HTMLString selector, Node context = null) const {
@@ -1392,12 +1414,12 @@ struct DOMBuilder(Document, size_t Options) {
 		}
 
 		element_ = document_.createElement(data, element_);
-		element_.flags_ |= elementFlags(data);
+		element_.flags_ |= elementFlags(element_.tagHash_);
 	}
 
-	size_t elementFlags(const(char)[] tag) {
+	size_t elementFlags(hash_t tagHash) {
 		size_t flags;
-		switch (tagHashOf(tag)) {
+		switch (tagHash) {
 		case tagHashOf("body"):
 		case tagHashOf("center"):
 		case tagHashOf("div"):
@@ -1637,10 +1659,11 @@ unittest {
 private struct Rule {
 	enum Flags : ushort {
 		HasTag          = 1 << 0,
-		HasAttr         = 1 << 1,
-		HasPseudo       = 1 << 2,
-		CaseSensitive   = 1 << 3,
-		HasAny          = 1 << 4,
+		HasID			= 1 << 1,
+		HasAttr         = 1 << 2,
+		HasPseudo       = 1 << 3,
+		CaseSensitive   = 1 << 4,
+		HasAny          = 1 << 5,
 	}
 
 	enum MatchType : ubyte {
@@ -1667,8 +1690,13 @@ private struct Rule {
 			return false;
 
 		if (flags_ & Flags.HasTag) {
-			if (!tag_.equalsCI(element.tag))
+			if (tagHash_ != element.tagHash)
 				return false;
+		}
+
+		if (flags_ & Flags.HasID) {
+			if (value_.empty || !element.hasID) return false;
+			if (value_ != element.id()) return false;
 		}
 
 		if (flags_ & Flags.HasAttr) {
@@ -1728,7 +1756,7 @@ private struct Rule {
 				if (!attr || ((attr.indexOf(value_, cs ? CaseSensitive.yes : CaseSensitive.no)) != 0) || ((attr.length > value_.length) && (attr[value_.length] != '-')))
 					return false;
 				break;
-		   }
+			}
 		}
 
 		if (flags_ & Flags.HasPseudo) {
@@ -1905,8 +1933,8 @@ package:
 	ushort flags_;
 	MatchType match_;
 	Relation relation_;
+	hash_t tagHash_;
 	size_t pseudo_;
-	HTMLString tag_;
 	HTMLString attr_;
 	HTMLString value_;
 	HTMLString pseudoArg_;
@@ -2014,7 +2042,7 @@ struct Selector {
 					continue;
 
 				rule.flags_ |= Rule.Flags.HasTag;
-				rule.tag_ = start[0..ptr-start];
+				rule.tagHash_ = tagHashOf(start[0..ptr-start]);
 				++tags;
 
 				state = PostIdentifier;
@@ -2041,9 +2069,7 @@ struct Selector {
 				if (ptr == end)
 					continue;
 
-				rule.flags_ |= Rule.Flags.HasAttr;
-				rule.match_ = Rule.MatchType.Exact;
-				rule.attr_ = "id";
+				rule.flags_ |= Rule.Flags.HasID;
 				rule.value_ = start[0..ptr-start];
 				++ids;
 

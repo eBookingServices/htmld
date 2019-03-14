@@ -204,7 +204,6 @@ unittest {
 	assert(doc.nodes.empty);
 }
 
-
 private struct QuerySelectorMatcher(NodeType, Nodes) if (isInputRange!Nodes) {
 	this(Selector selector, Nodes nodes) {
 		selector_ = selector;
@@ -1006,6 +1005,8 @@ class Node {
 
 	Node clone(Document document) const {
 		auto node = document.allocNode(tag_, flags_);
+		node.tagHash_ = tagHash_;
+		node.flags_ = flags_;
 
 		foreach (HTMLString attr, HTMLString value; attrs_)
 			node.attrs_[attr] = value;
@@ -1161,6 +1162,7 @@ class Document {
 	auto createElement(HTMLString tagName, Node parent = null) {
 		auto node = allocNode(tagName, NodeTypes.Element << Node.TypeShift);
 		node.tagHash_ = tagHashOf(tagName);
+		node.flags_ |= elementFlags(node.tagHash_);
 		if (parent)
 			parent.appendChild(node);
 		return node;
@@ -1367,7 +1369,7 @@ unittest {
 }
 
 
-struct DOMBuilder(Document, size_t Options) {
+static struct DOMBuilder(Document, size_t Options) {
 	enum {
 		Validate 				= (Options & DOMCreateOptions.ValidateAll) != 0,
 		ValidateClosed 			= (Options & DOMCreateOptions.ValidateClosed) != 0,
@@ -1415,65 +1417,6 @@ struct DOMBuilder(Document, size_t Options) {
 
 		element_ = document_.createElement(data, element_);
 		element_.flags_ |= elementFlags(element_.tagHash_);
-	}
-
-	size_t elementFlags(hash_t tagHash) {
-		size_t flags;
-		switch (tagHash) {
-		case tagHashOf("body"):
-		case tagHashOf("center"):
-		case tagHashOf("div"):
-		case tagHashOf("dl"):
-		case tagHashOf("form"):
-		case tagHashOf("head"):
-		case tagHashOf("html"):
-		case tagHashOf("noscript"):
-		case tagHashOf("ol"):
-		case tagHashOf("p"):
-		case tagHashOf("table"):
-		case tagHashOf("tbody"):
-		case tagHashOf("td"):
-		case tagHashOf("tfoot"):
-		case tagHashOf("th"):
-		case tagHashOf("thead"):
-		case tagHashOf("title"):
-		case tagHashOf("tr"):
-		case tagHashOf("ul"):
-			flags |= Node.Flags.BlockElement;
-			break;
-		case tagHashOf("br"):
-		case tagHashOf("hr"):
-		case tagHashOf("link"):
-		case tagHashOf("meta"):
-			flags |= Node.Flags.BlockElement;
-			flags |= Node.Flags.VoidElement;
-			break;
-		case tagHashOf("area"):
-		case tagHashOf("base"):
-		case tagHashOf("basefont"):
-		case tagHashOf("col"):
-		case tagHashOf("embed"):
-		case tagHashOf("img"):
-		case tagHashOf("input"):
-		case tagHashOf("isindex"):
-		case tagHashOf("param"):
-		case tagHashOf("source"):
-		case tagHashOf("track"):
-		case tagHashOf("wbr"):
-			flags |= Node.Flags.VoidElement;
-			break;
-		case tagHashOf("script"):
-			flags |= Node.Flags.BlockElement;
-			flags |= Node.Flags.ScriptElement;
-			break;
-		case tagHashOf("style"):
-			flags |= Node.Flags.BlockElement;
-			flags |= Node.Flags.StyleElement;
-			break;
-		default:
-			break;
-		}
-		return flags;
 	}
 
 	void onOpenEnd(HTMLString data) {
@@ -2330,4 +2273,64 @@ private:
 	HTMLString source_;
 	Rule[] rules_;
 	size_t specificity_;
+}
+
+
+private size_t elementFlags(hash_t tagHash) {
+	size_t flags;
+	switch (tagHash) {
+	case tagHashOf("body"):
+	case tagHashOf("center"):
+	case tagHashOf("div"):
+	case tagHashOf("dl"):
+	case tagHashOf("form"):
+	case tagHashOf("head"):
+	case tagHashOf("html"):
+	case tagHashOf("noscript"):
+	case tagHashOf("ol"):
+	case tagHashOf("p"):
+	case tagHashOf("table"):
+	case tagHashOf("tbody"):
+	case tagHashOf("td"):
+	case tagHashOf("tfoot"):
+	case tagHashOf("th"):
+	case tagHashOf("thead"):
+	case tagHashOf("title"):
+	case tagHashOf("tr"):
+	case tagHashOf("ul"):
+		flags |= Node.Flags.BlockElement;
+		break;
+	case tagHashOf("br"):
+	case tagHashOf("hr"):
+	case tagHashOf("link"):
+	case tagHashOf("meta"):
+		flags |= Node.Flags.BlockElement;
+		flags |= Node.Flags.VoidElement;
+		break;
+	case tagHashOf("area"):
+	case tagHashOf("base"):
+	case tagHashOf("basefont"):
+	case tagHashOf("col"):
+	case tagHashOf("embed"):
+	case tagHashOf("img"):
+	case tagHashOf("input"):
+	case tagHashOf("isindex"):
+	case tagHashOf("param"):
+	case tagHashOf("source"):
+	case tagHashOf("track"):
+	case tagHashOf("wbr"):
+		flags |= Node.Flags.VoidElement;
+		break;
+	case tagHashOf("script"):
+		flags |= Node.Flags.BlockElement;
+		flags |= Node.Flags.ScriptElement;
+		break;
+	case tagHashOf("style"):
+		flags |= Node.Flags.BlockElement;
+		flags |= Node.Flags.StyleElement;
+		break;
+	default:
+		break;
+	}
+	return flags;
 }
